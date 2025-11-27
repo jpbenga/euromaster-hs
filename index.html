@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <?!= include('styles'); ?>
+  </head>
+  <body>
+    <div id="app">
+      <!-- Dynamic Content will be loaded here -->
+      <div id="loading" class="loading-spinner">Chargement...</div>
+      
+      <div id="login-view" class="hidden">
+        <div class="login-card">
+          <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Euromaster_logo.svg/1200px-Euromaster_logo.svg.png" alt="Euromaster Logo" class="logo">
+          <h2>Portail Heures Supplémentaires</h2>
+          <form id="login-form">
+            <div class="form-group">
+              <label for="identifier">Email ou Matricule</label>
+              <input type="text" id="identifier" name="identifier" required placeholder="ex: jean.dupont@euromaster.com">
+            </div>
+            <button type="submit" class="btn-primary">Connexion</button>
+          </form>
+          <div id="login-error" class="error-message hidden"></div>
+        </div>
+      </div>
+
+      <div id="collaborator-view" class="hidden">
+        <!-- Content loaded from collaborator.html via JS or just hidden/shown -->
+        <!-- For simplicity in GAS, we often put everything in one file or use templates. 
+             Here we'll use a container and inject content or toggle visibility if we include them all. 
+             Let's assume we include the partials here for simplicity of the single-page app feel. -->
+        <?!= include('collaborator'); ?>
+      </div>
+
+      <div id="manager-view" class="hidden">
+        <?!= include('manager'); ?>
+      </div>
+
+    </div>
+    <?!= include('scripts'); ?>
+  </body>
+</html>

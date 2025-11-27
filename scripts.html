@@ -1,0 +1,185 @@
+<script>
+    // Global State
+    let currentUser = null;
+
+    // DOM Elements
+    const views = {
+        loading: document.getElementById('loading'),
+        login: document.getElementById('login-view'),
+        collaborator: document.getElementById('collaborator-view'),
+        manager: document.getElementById('manager-view')
+    };
+
+    // Initialization
+    document.addEventListener('DOMContentLoaded', function () {
+        // Check if user is already logged in or just show login
+        // For this simple app, we start at login unless we implement session persistence or auto-login via GAS
+        showView('login');
+
+        // Attach Event Listeners
+        document.getElementById('login-form').addEventListener('submit', handleLogin);
+    });
+
+    // Navigation
+    function showView(viewName) {
+        Object.values(views).forEach(el => el.classList.add('hidden'));
+        views[viewName].classList.remove('hidden');
+    }
+
+    // Login Handler
+    function handleLogin(e) {
+        e.preventDefault();
+        const identifier = document.getElementById('identifier').value;
+        const errorEl = document.getElementById('login-error');
+
+        errorEl.textContent = '';
+        errorEl.classList.add('hidden');
+
+        // Show loading state on button or global
+        const btn = e.target.querySelector('button');
+        const originalText = btn.textContent;
+        btn.textContent = 'Vérification...';
+        btn.disabled = true;
+
+        google.script.run
+            .withSuccessHandler(function (user) {
+                currentUser = user;
+                btn.textContent = originalText;
+                btn.disabled = false;
+
+                if (user.role === 'MANAGER') {
+                    initManagerView();
+                    showView('manager');
+                } else {
+                    initCollaboratorView();
+                    showView('collaborator');
+                }
+            })
+            .withFailureHandler(function (error) {
+                btn.textContent = originalText;
+                btn.disabled = false;
+                errorEl.textContent = error.message;
+                errorEl.classList.remove('hidden');
+            })
+            .loginUser(identifier);
+    }
+
+    // Collaborator Logic
+    function initCollaboratorView() {
+        document.getElementById('collab-name').textContent = currentUser.prenom + ' ' + currentUser.nom;
+        loadHistory();
+
+        const form = document.getElementById('hs-form');
+        if (form) {
+            // Remove old listener to avoid duplicates if re-init
+            const newForm = form.cloneNode(true);
+            form.parentNode.replaceChild(newForm, form);
+            newForm.addEventListener('submit', handleHSSubmit);
+        }
+    }
+
+    function handleHSSubmit(e) {
+        e.preventDefault();
+        const form = e.target;
+        const data = {
+            matricule: currentUser.matricule,
+            codeCentre: currentUser.code_centre,
+            date: form.date.value,
+            startTime: form.startTime.value,
+            endTime: form.endTime.value,
+            reason: form.reason.value
+        };
+
+        google.script.run
+            .withSuccessHandler(function (result) {
+                if (result.success) {
+                    alert('Heures supplémentaires soumises avec succès !');
+                    form.reset();
+                    loadHistory();
+                } else {
+                    alert('Erreur: ' + result.error);
+                }
+            })
+            .submitOvertime(data);
+    }
+
+    function loadHistory() {
+        const tbody = document.getElementById('history-body');
+        tbody.innerHTML = '<tr><td colspan="4">Chargement...</td></tr>';
+
+        google.script.run
+            .withSuccessHandler(function (history) {
+                tbody.innerHTML = '';
+                if (history.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4">Aucune historique.</td></tr>';
+                    return;
+                }
+
+                history.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+          <td>${new Date(item.date).toLocaleDateString()}</td>
+          <td>${item.duration} h</td>
+          <td>${item.motif}</td>
+          <td><span class="status-badge status-${item.statusManager}">${item.statusManager}</span></td>
+        `;
+                    tbody.appendChild(row);
+                });
+            })
+            .getOvertimeHistory(currentUser.matricule);
+    }
+
+    // Manager Logic
+    function initManagerView() {
+        document.getElementById('manager-name').textContent = currentUser.prenom + ' ' + currentUser.nom;
+        loadPendingApprovals();
+    }
+
+    function loadPendingApprovals() {
+        const container = document.getElementById('approvals-list');
+        container.innerHTML = 'Chargement...';
+
+        google.script.run
+            .withSuccessHandler(function (list) {
+                container.innerHTML = '';
+                if (list.length === 0) {
+                    container.innerHTML = '<p>Aucune demande en attente.</p>';
+                    return;
+                }
+
+                list.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.innerHTML = `
+          <h3>${item.matricule} - ${new Date(item.date).toLocaleDateString()}</h3>
+          <p><strong>Durée:</strong> ${item.duration} h</p>
+          <p><strong>Motif:</strong> ${item.motif}</p>
+          <div class="actions">
+            <button onclick="processValidation('${item.id}', 'APPROVE')" class="btn-primary" style="width:auto; background-color: var(--success-color)">Valider</button>
+            <button onclick="processValidation('${item.id}', 'REJECT')" class="btn-secondary" style="background-color: var(--error-color)">Refuser</button>
+          </div>
+        `;
+                    container.appendChild(card);
+                });
+            })
+            .getPendingApprovals(currentUser.code_centre);
+    }
+
+    function processValidation(id, action) {
+        let reason = '';
+        if (action === 'REJECT') {
+            reason = prompt('Motif du refus (obligatoire):');
+            if (!reason) return;
+        }
+
+        google.script.run
+            .withSuccessHandler(function (success) {
+                if (success) {
+                    loadPendingApprovals();
+                } else {
+                    alert('Erreur lors de la mise à jour.');
+                }
+            })
+            .processValidation(id, action, reason);
+    }
+</script>
