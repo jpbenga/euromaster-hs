@@ -1,182 +1,428 @@
 /**
  * Database.gs
- * Handles all interactions with the Google Sheet.
+ * Handles all interactions with the Google Sheet, including CRUD for Collaborators and Overtime logs.
  */
 
 // CONFIGURATION
-// Replace with the actual Spreadsheet ID after creation
-const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID_HERE'; 
+// NOUVEAU: L'ID DE LA FEUILLE EST MAINTENANT STOCKÉ DANS LES PROPRIÉTÉS DU SCRIPT (non plus en dur).
+const SPREADSHEET_ID_KEY = 'EUROMAS_HS_SPREADSHEET_ID'; 
 
 const SHEET_NAMES = {
   COLLABORATORS: 'COLLABORATEURS',
-  SCHEDULES: 'HORAIRES_REF',
-  ENTRIES: 'SAISIES_HS'
+  SCHEDULES: 'HORAIRES_REF', 
+  OVERTIME: 'SAISIES_HS' 
 };
 
 /**
- * Connects to the spreadsheet.
+ * Helper to get the Spreadsheet object.
+ * @return {Spreadsheet} The Spreadsheet object.
  */
 function getSpreadsheet() {
-  if (SPREADSHEET_ID === 'YOUR_SPREADSHEET_ID_HERE') {
-    // Fallback for testing if ID is not set, or throw error
-    // In a real scenario, we might create one if it doesn't exist, but here we expect the user to set it.
-    throw new Error('Spreadsheet ID not configured in Database.gs');
+  const ssId = PropertiesService.getScriptProperties().getProperty(SPREADSHEET_ID_KEY);
+  
+  if (!ssId) {
+     throw new Error("L'ID de la base de données n'a pas été configuré. L'application doit être initialisée.");
   }
-  return SpreadsheetApp.openById(SPREADSHEET_ID);
+  
+  const ss = SpreadsheetApp.openById(ssId);
+  if (!ss) { 
+      // Vérifie si openById a retourné null (ID invalide ou accès refusé)
+      throw new Error("La feuille de calcul n'a pas pu être ouverte. Veuillez vérifier l'ID enregistré ou les permissions.");
+  }
+  return ss;
 }
 
 /**
- * Fetches a collaborator by Email or Matricule.
- * @param {string} identifier - Email or Matricule
- * @return {Object|null} Collaborator object or null if not found
+ * NOUVEAU: Stocke l'ID de la nouvelle feuille de calcul dans les propriétés du script.
+ * Ceci lie cette installation Apps Script à sa BDD unique.
+ * @param {string} ssId - The ID of the newly created Spreadsheet.
  */
+function setSpreadsheetId(ssId) {
+    PropertiesService.getScriptProperties().setProperty(SPREADSHEET_ID_KEY, ssId);
+}
+
+/**
+ * Checks if the collaborators sheet has data beyond the header row.
+ * @return {boolean} True if setup is needed (only header exists or sheet is empty).
+ */
+function isSetupNeeded() {
+  try {
+    const ss = getSpreadsheet();
+    const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
+    
+    if (!sheet) {
+        return true;
+    }
+    
+    // Si le nombre de lignes est <= 1 (juste l'en-tête ou vide), l'installation est requise.
+    return sheet.getLastRow() <= 1; 
+  } catch (e) {
+      // Si getSpreadsheet échoue parce que l'ID n'est pas encore enregistré (cas normal au démarrage), le Setup est requis.
+      if (e.message.includes('ID de la base de données n\'a pas été configuré')) {
+          return true;
+      }
+      // Gère le cas où l'ID est là, mais la feuille ne peut pas être ouverte (ID invalide/supprimé)
+      if (e.message.includes('La feuille de calcul n\'a pas pu être ouverte')) {
+          return true;
+      }
+      throw e;
+  }
+}
+
+/**
+ * Crée les feuilles de calcul et définit les en-têtes si elles sont manquantes.
+ * @param {Spreadsheet} ss - Le Spreadsheet object (peut être nouvellement créé ou existant).
+ */
+function initializeDatabaseStructure(ss) {
+    // 1. COLLABORATEURS
+    let collabSheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
+    if (!collabSheet) {
+        collabSheet = ss.insertSheet(SHEET_NAMES.COLLABORATORS);
+    }
+    if (collabSheet.getLastRow() < 1) {
+        collabSheet.getRange(1, 1, 1, 6).setValues([
+            ['ID_MATRICULE', 'NOM', 'PRENOM', 'EMAIL', 'CODE_CENTRE', 'ROLE']
+        ]).setFontWeight('bold');
+    }
+
+
+    // 2. HORAIRES_REF
+    let scheduleSheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
+    if (!scheduleSheet) {
+        scheduleSheet = ss.insertSheet(SHEET_NAMES.SCHEDULES);
+    }
+    if (scheduleSheet.getLastRow() < 1) {
+        scheduleSheet.getRange(1, 1, 1, 4).setValues([
+            ['CODE_CENTRE', 'HEURE_DEBUT_STD', 'HEURE_FIN_STD', 'DUREE_PAUSE']
+        ]).setFontWeight('bold');
+    }
+
+    // 3. SAISIES_HS
+    let overtimeSheet = ss.getSheetByName(SHEET_NAMES.OVERTIME);
+    if (!overtimeSheet) {
+        overtimeSheet = ss.insertSheet(SHEET_NAMES.OVERTIME);
+    }
+    if (overtimeSheet.getLastRow() < 1) {
+        overtimeSheet.getRange(1, 1, 1, 12).setValues([
+            ['DATE_SAISIE', 'DATE_HEURES_SUPP', 'COLLAB_MATRICULE', 'COLLAB_NOM', 'COLLAB_PRENOM', 'HEURES', 'MINUTES', 'DESCRIPTION', 'STATUT', 'DATE_VALIDATION', 'MANAGER_MATRICULE', 'MOTIF_REJET']
+        ]).setFontWeight('bold');
+    }
+    
+    // Supprimer l'onglet par défaut s'il est vide
+    const defaultSheet = ss.getSheetByName('Feuille 1') || ss.getSheetByName('Sheet1');
+    if (defaultSheet && defaultSheet.getLastRow() === 0) {
+        ss.deleteSheet(defaultSheet);
+    }
+}
+
+
+// =========================================================================
+// COLLABORATOR (CRUD) Logic
+// ... (Reste des fonctions inchangées)
+// =========================================================================
+
 function getCollaborator(identifier) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
+  
+  if (!sheet) {
+      throw new Error("L'onglet de la feuille de calcul '" + SHEET_NAMES.COLLABORATORS + "' est introuvable.");
+  }
+  
   const data = sheet.getDataRange().getValues();
-  const headers = data.shift(); // Remove headers
+  const headers = data.shift();
   
-  // Columns: ID_MATRICULE, NOM, PRENOM, EMAIL, CODE_CENTRE, ROLE
-  const emailIndex = headers.indexOf('EMAIL');
-  const matriculeIndex = headers.indexOf('ID_MATRICULE');
+  const headerMap = {};
+  headers.forEach((h, i) => headerMap[String(h).trim()] = i); 
   
+  const emailFound = typeof headerMap['EMAIL'] !== 'undefined';
+  const matriculeFound = typeof headerMap['ID_MATRICULE'] !== 'undefined';
+  
+  if (!emailFound || !matriculeFound) {
+      throw new Error("Feuille COLLABORATEURS : Les en-têtes EMAIL ou ID_MATRICULE sont manquants.");
+  }
+
+  const emailIndex = headerMap['EMAIL'];
+  const matriculeIndex = headerMap['ID_MATRICULE'];
+  
+  const normalizedIdentifier = String(identifier).toLowerCase();
+
   for (let i = 0; i < data.length; i++) {
     const row = data[i];
-    if (row[emailIndex] === identifier || row[matriculeIndex] == identifier) {
+    
+    if (String(row[emailIndex]).toLowerCase() === normalizedIdentifier) {
       return {
-        matricule: row[headers.indexOf('ID_MATRICULE')],
-        nom: row[headers.indexOf('NOM')],
-        prenom: row[headers.indexOf('PRENOM')],
-        email: row[headers.indexOf('EMAIL')],
-        code_centre: row[headers.indexOf('CODE_CENTRE')],
-        role: row[headers.indexOf('ROLE')]
+        matricule: row[matriculeIndex],
+        nom: row[headerMap['NOM']],
+        prenom: row[headerMap['PRENOM']],
+        email: row[emailIndex],
+        code_centre: row[headerMap['CODE_CENTRE']],
+        role: row[headerMap['ROLE']]
+      };
+    }
+    
+    if (String(row[matriculeIndex]) === String(identifier)) {
+       return {
+        matricule: row[matriculeIndex],
+        nom: row[headerMap['NOM']],
+        prenom: row[headerMap['PRENOM']],
+        email: row[emailIndex],
+        code_centre: row[headerMap['CODE_CENTRE']],
+        role: row[headerMap['ROLE']]
       };
     }
   }
   return null;
 }
 
-/**
- * Logs a new overtime entry.
- * @param {Object} entryData
- */
-function logOvertime(entryData) {
+function getAllCollaborators() {
   const ss = getSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAMES.ENTRIES);
-  
-  // ID_SAISIE, MATRICULE, DATE_HS, HEURE_DEBUT_REELLE, HEURE_FIN_REELLE, DUREE_CALCULEE, STATUT_COLLAB, STATUT_MANAGER, EMAIL_MANAGER, MOTIF, DATE_VALIDATION
-  const id = Utilities.getUuid();
-  const timestamp = new Date();
-  
-  sheet.appendRow([
-    id,
-    entryData.matricule,
-    entryData.date,
-    entryData.startTime,
-    entryData.endTime,
-    entryData.duration,
-    'VALIDATED_BY_COLLAB', // Auto-validated by collab as per requirements (Approche 1)
-    'PENDING',
-    '', // Manager email (filled later)
-    entryData.reason,
-    '' // Validation date
-  ]);
-  
-  return id;
-}
-
-/**
- * Gets overtime history for a specific collaborator.
- */
-function getOvertimeHistory(matricule) {
-  const ss = getSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAMES.ENTRIES);
+  const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
   const data = sheet.getDataRange().getValues();
   const headers = data.shift();
   
-  const matriculeIndex = headers.indexOf('MATRICULE');
-  const history = [];
+  const collaborators = [];
+  
+  const headerMap = {};
+  headers.forEach((h, i) => headerMap[String(h).trim()] = i);
   
   for (let i = 0; i < data.length; i++) {
-    if (data[i][matriculeIndex] == matricule) {
+    const row = data[i];
+    collaborators.push({
+      matricule: row[headerMap['ID_MATRICULE']],
+      nom: row[headerMap['NOM']],
+      prenom: row[headerMap['PRENOM']],
+      email: row[headerMap['EMAIL']],
+      code_centre: row[headerMap['CODE_CENTRE']],
+      role: row[headerMap['ROLE']]
+    });
+  }
+  return collaborators;
+}
+
+function createCollaborator(collabData) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
+  
+  sheet.appendRow([
+    collabData.matricule,
+    collabData.nom,
+    collabData.prenom,
+    collabData.email,
+    collabData.code_centre,
+    collabData.role
+  ]);
+  
+  return true;
+}
+
+function updateCollaborator(collabData) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data.shift();
+  
+  const headerMap = {};
+  headers.forEach((h, i) => headerMap[String(h).trim()] = i);
+
+  const matriculeIndex = headerMap['ID_MATRICULE'];
+  
+  for (let i = 0; i < data.length; i++) {
+    if (String(data[i][matriculeIndex]) == String(collabData.matricule)) {
+      const rowIndex = i + 2; 
+      
+      const rowToUpdate = [
+        collabData.matricule,
+        collabData.nom,
+        collabData.prenom,
+        collabData.email,
+        collabData.code_centre,
+        collabData.role
+      ];
+      
+      sheet.getRange(rowIndex, 1, 1, rowToUpdate.length).setValues([rowToUpdate]);
+      return true;
+    }
+  }
+  return false;
+}
+
+function deleteCollaborator(matricule) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data.shift();
+  
+  const headerMap = {};
+  headers.forEach((h, i) => headerMap[String(h).trim()] = i);
+
+  const matriculeIndex = headerMap['ID_MATRICULE'];
+  
+  for (let i = 0; i < data.length; i++) {
+    if (String(data[i][matriculeIndex]) == String(matricule)) {
+      const rowIndex = i + 2; // Row index to delete (including header offset)
+      sheet.deleteRow(rowIndex);
+      return true;
+    }
+  }
+  return false;
+}
+
+function getRefSchedule(codeCentre) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
+  if (!sheet) return null;
+  
+  const data = sheet.getDataRange().getValues();
+  const headers = data.shift();
+  
+  const headerMap = {};
+  headers.forEach((h, i) => headerMap[String(h).trim()] = i);
+  
+  const centreIndex = headerMap['CODE_CENTRE'];
+
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    if (String(row[centreIndex]) === String(codeCentre)) {
+      return {
+        startTime: row[headerMap['HEURE_DEBUT_STD']],
+        endTime: row[headerMap['HEURE_FIN_STD']],
+        pauseDurationMinutes: row[headerMap['DUREE_PAUSE']] || 0 
+      };
+    }
+  }
+  return null;
+}
+
+function createRefSchedule(scheduleData) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
+  
+  sheet.appendRow([
+    scheduleData.codeCentre,
+    scheduleData.startTime,
+    scheduleData.endTime,
+    scheduleData.pauseDurationMinutes
+  ]);
+  
+  return true;
+}
+
+function logOvertime(overtimeData) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.OVERTIME);
+  
+  sheet.appendRow([
+    new Date(), 
+    overtimeData.date, 
+    overtimeData.matricule, 
+    overtimeData.nom, 
+    overtimeData.prenom, 
+    overtimeData.hours, 
+    overtimeData.minutes, 
+    overtimeData.description, 
+    'EN_ATTENTE', 
+    '', 
+    '', 
+    '' 
+  ]);
+  
+  return true;
+}
+
+function getOvertimeHistory(matricule) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.OVERTIME);
+  const data = sheet.getDataRange().getValues();
+  const headers = data.shift();
+  
+  const history = [];
+  const headerMap = {};
+  headers.forEach((h, i) => headerMap[String(h).trim()] = i);
+  
+  const matriculeIndex = headerMap['COLLAB_MATRICULE'];
+
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    if (String(row[matriculeIndex]) === String(matricule)) {
       history.push({
-        id: data[i][headers.indexOf('ID_SAISIE')],
-        date: data[i][headers.indexOf('DATE_HS')],
-        duration: data[i][headers.indexOf('DUREE_CALCULEE')],
-        statusManager: data[i][headers.indexOf('STATUT_MANAGER')],
-        motif: data[i][headers.indexOf('MOTIF')]
+        row_id: i + 2,
+        date_supp: row[headerMap['DATE_HEURES_SUPP']],
+        hours: row[headerMap['HEURES']],
+        minutes: row[headerMap['MINUTES']],
+        description: row[headerMap['DESCRIPTION']],
+        status: row[headerMap['STATUT']],
+        rejectionReason: row[headerMap['MOTIF_REJET']] || null
       });
     }
   }
+  history.sort((a, b) => new Date(b.date_supp).getTime() - new Date(a.date_supp).getTime());
+  
   return history;
 }
 
-/**
- * Gets pending approvals for a manager (based on centre or all for now).
- * Assuming Manager sees all for the pilot or filtered by centre if we implement that logic.
- */
 function getPendingApprovals(managerCodeCentre) {
   const ss = getSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAMES.ENTRIES);
+  const sheet = ss.getSheetByName(SHEET_NAMES.OVERTIME);
   const data = sheet.getDataRange().getValues();
   const headers = data.shift();
   
-  // We might need to join with Collaborators to filter by centre if needed
-  // For now, returning all PENDING
+  const headerMap = {};
+  headers.forEach((h, i) => headerMap[String(h).trim()] = i);
   
-  const statusIndex = headers.indexOf('STATUT_MANAGER');
+  const statusIndex = headerMap['STATUT'];
   const pending = [];
   
+  const allCollaborators = getAllCollaborators(); 
+  const centreCollaborators = allCollaborators.filter(c => String(c.code_centre) === String(managerCodeCentre));
+  const validMatricules = centreCollaborators.map(c => String(c.matricule));
+
   for (let i = 0; i < data.length; i++) {
-    if (data[i][statusIndex] === 'PENDING') {
+    const row = data[i];
+    const matricule = String(row[headerMap['COLLAB_MATRICULE']]);
+
+    if (row[statusIndex] === 'EN_ATTENTE' && validMatricules.includes(matricule)) {
       pending.push({
-        id: data[i][headers.indexOf('ID_SAISIE')],
-        matricule: data[i][headers.indexOf('MATRICULE')],
-        date: data[i][headers.indexOf('DATE_HS')],
-        duration: data[i][headers.indexOf('DUREE_CALCULEE')],
-        motif: data[i][headers.indexOf('MOTIF')]
+        row_id: i + 2,
+        date_supp: row[headerMap['DATE_HEURES_SUPP']],
+        matricule: matricule,
+        nom: row[headerMap['COLLAB_NOM']],
+        prenom: row[headerMap['COLLAB_PRENOM']],
+        hours: row[headerMap['HEURES']],
+        minutes: row[headerMap['MINUTES']],
+        description: row[headerMap['DESCRIPTION']]
       });
     }
   }
   return pending;
 }
 
-/**
- * Updates the status of an entry (Approve/Reject).
- */
-function updateStatus(entryId, newStatus, managerEmail, rejectionReason) {
+function updateStatus(rowId, status, managerMatricule, rejectionReason) {
   const ss = getSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAMES.ENTRIES);
-  const data = sheet.getDataRange().getValues();
-  const headers = data.shift(); // headers are not in data array for loop if we use getValues() on range excluding header, but here we used getDataRange so headers are row 0
+  const sheet = ss.getSheetByName(SHEET_NAMES.OVERTIME);
   
-  // Actually getDataRange includes headers.
-  // Let's find the row by ID.
+  const date = new Date();
   
-  const idIndex = headers.indexOf('ID_SAISIE');
+  sheet.getRange(rowId, 9).setValue(status);
+  sheet.getRange(rowId, 10).setValue(date);
+  sheet.getRange(rowId, 11).setValue(managerMatricule);
   
-  for (let i = 0; i < data.length; i++) {
-    if (data[i][idIndex] === entryId) {
-      // Row index in sheet is i + 2 (1 for header, 1 for 0-based index)
-      const rowIndex = i + 2;
-      
-      const statusCol = headers.indexOf('STATUT_MANAGER') + 1;
-      const emailCol = headers.indexOf('EMAIL_MANAGER') + 1;
-      const dateCol = headers.indexOf('DATE_VALIDATION') + 1;
-      
-      sheet.getRange(rowIndex, statusCol).setValue(newStatus);
-      sheet.getRange(rowIndex, emailCol).setValue(managerEmail);
-      sheet.getRange(rowIndex, dateCol).setValue(new Date());
-      
-      if (newStatus === 'REJECTED' && rejectionReason) {
-         // Optionally append reason to motif or a separate column?
-         // Requirement says "envoi d'un motif obligatoire". We might need a COMMENT column or append to MOTIF.
-         // Let's append to MOTIF for now or assume there's a column we missed.
-         // Let's add a COMMENT column to schema if not present.
-         // For now, let's just log it.
-      }
-      return true;
-    }
+  if (status === 'REJETE' && rejectionReason) {
+      sheet.getRange(rowId, 12).setValue(rejectionReason);
+  } else {
+      sheet.getRange(rowId, 12).setValue('');
   }
-  return false;
+  
+  return true;
+}
+
+function deleteOvertimeEntry(rowId) {
+    const ss = getSpreadsheet();
+    const sheet = ss.getSheetByName(SHEET_NAMES.OVERTIME);
+    
+    if (rowId > 1 && rowId <= sheet.getLastRow()) {
+        sheet.deleteRow(rowId);
+        return true;
+    }
+    return false;
 }

@@ -1,42 +1,83 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <base target="_top">
-    <?!= include('styles'); ?>
-  </head>
-  <body>
-    <div id="app">
-      <!-- Dynamic Content will be loaded here -->
-      <div id="loading" class="loading-spinner">Chargement...</div>
-      
-      <div id="login-view" class="hidden">
-        <div class="login-card">
-          <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Euromaster_logo.svg/1200px-Euromaster_logo.svg.png" alt="Euromaster Logo" class="logo">
-          <h2>Portail Heures Supplémentaires</h2>
-          <form id="login-form">
-            <div class="form-group">
-              <label for="identifier">Email ou Matricule</label>
-              <input type="text" id="identifier" name="identifier" required placeholder="ex: jean.dupont@euromaster.com">
-            </div>
-            <button type="submit" class="btn-primary">Connexion</button>
-          </form>
-          <div id="login-error" class="error-message hidden"></div>
-        </div>
-      </div>
 
-      <div id="collaborator-view" class="hidden">
-        <!-- Content loaded from collaborator.html via JS or just hidden/shown -->
-        <!-- For simplicity in GAS, we often put everything in one file or use templates. 
-             Here we'll use a container and inject content or toggle visibility if we include them all. 
-             Let's assume we include the partials here for simplicity of the single-page app feel. -->
-        <?!= include('collaborator'); ?>
-      </div>
+<head>
+  <base target="_top">
+  <?!= include('styles'); ?>
+</head>
 
-      <div id="manager-view" class="hidden">
-        <?!= include('manager'); ?>
-      </div>
+<body>
+  <div id="app-container">
 
+    <div id="loading-view" class="view">
+      <div class="login-card">
+        <p>Authentification et vérification de l'état du système en cours...</p>
+      </div>
     </div>
-    <?!= include('scripts'); ?>
-  </body>
+
+    <div id="login-view" class="view hidden">
+      <div class="login-card">
+        <img
+          src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Euromaster_logo.svg/1200px-Euromaster_logo.svg.png"
+          alt="Euromaster Logo" class="logo">
+        <h2>Portail Heures Supplémentaires</h2>
+        <div id="login-error" class="error-message"></div>
+      </div>
+    </div>
+
+    <div id="choice-view" class="view hidden">
+      <div class="login-card">
+        <img
+          src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Euromaster_logo.svg/1200px-Euromaster_logo.svg.png"
+          alt="Euromaster Logo" class="logo">
+        <h2>Bienvenue</h2>
+        <p>Veuillez choisir votre action.</p>
+
+        <button id="setup-button" class="btn-primary" onclick="showView('setup-view')" style="margin-bottom: 10px;">
+          Créer un nouveau centre (Première Utilisation)
+        </button>
+
+        <button id="login-button" class="btn-secondary" onclick="tryLogin()">
+          Se Connecter
+        </button>
+        <div id="choice-error" class="error-message hidden"></div>
+      </div>
+    </div>
+
+    <?!= include('setup'); ?>
+
+    <div id="collaborator-view" class="view hidden">
+      <?!= include('collaborator'); ?>
+    </div>
+
+    <div id="manager-view" class="view hidden">
+      <?!= include('manager'); ?>
+    </div>
+
+  </div>
+
+  <div id="notification-container"></div>
+
+  <div id="rejection-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <h3>Motif du Rejet</h3>
+      <form id="rejection-form">
+        <input type="hidden" id="rejection-entry-id" name="entryId">
+        <div class="form-group">
+          <label for="rejection-reason">Veuillez expliquer clairement la raison du refus (Obligatoire)</label>
+          <textarea id="rejection-reason" name="reason" rows="3" required></textarea>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button type="submit" class="btn-primary" id="rejection-submit-btn" style="width: 50%;">Confirmer le
+            Rejet</button>
+          <button type="button" class="btn-secondary" style="width: 50%;"
+            onclick="hideRejectionModal()">Annuler</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <?!= include('scripts'); ?>
+</body>
+
 </html>

@@ -1,37 +1,39 @@
 /**
- * Main entry point for the Web App.
- * Handles routing based on user role and parameters.
+ * Code.gs
+ * Global entry points.
  */
-function doGet(e) {
-  var template = HtmlService.createTemplateFromFile('index');
-  return template.evaluate()
-      .setTitle('Euromaster HS Manager')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+
+/**
+ * Main function that runs when the web app is accessed.
+ */
+function doGet() {
+  const template = HtmlService.createTemplateFromFile('index');
+  const html = template.evaluate();
+  html.setTitle('Euromaster HS Manager');
+  // Autoriser l'affichage dans Google Workspace ou dans des iframes.
+  html.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL); 
+  return html;
 }
 
 /**
- * Helper function to include HTML fragments.
- * Used to separate CSS and JS into different files.
+ * Includes HTML files for templating.
+ * @param {string} filename - The name of the HTML file to include.
+ * @return {string} The content of the HTML file.
  */
 function include(filename) {
-  return HtmlService.createHtmlOutputFromFile(filename)
-      .getContent();
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
 /**
- * Gets the effective user's email.
- * This is the email of the user accessing the web app.
+ * Utility to get the email of the user accessing the app.
+ * @return {string} The email of the effective user.
  */
 function getEffectiveUserEmail() {
-  return Session.getEffectiveUser().getEmail();
-}
-
-/**
- * Gets the active user's email.
- * This might be different from effective user depending on deployment.
- * For this app, we generally rely on the user being logged in to Google Workspace.
- */
-function getActiveUserEmail() {
-  return Session.getActiveUser().getEmail();
+  try {
+    // Si l'application est déployée sous 'User accessing the web app', ceci retourne l'email de l'utilisateur connecté.
+    return Session.getEffectiveUser().getEmail(); 
+  } catch (e) {
+    Logger.log("Error getting effective user email: " + e.toString());
+    return '';
+  }
 }
