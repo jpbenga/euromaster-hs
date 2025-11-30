@@ -19,31 +19,26 @@
     }
 
     // =========================================================================
-    // SECTION COMMUNICATION & RAPPELS (Triggers)
+    // SECTION COMMUNICATION & RAPPELS
     // =========================================================================
 
     function checkAutomaticScheduleStatus() {
         const statusEl = document.getElementById('trigger-status');
         if (!statusEl) return;
-
         statusEl.innerHTML = 'Statut: Vérification...';
-
-        google.script.run
-            .withSuccessHandler(function (status) {
-                if (status.active) {
-                    statusEl.innerHTML = `<span style="color: var(--success-color); font-weight: bold;">Statut: ACTIF</span> (${status.description})`;
-                    document.getElementById('set-trigger-btn').textContent = 'Mettre à Jour';
-                    document.getElementById('delete-trigger-btn').disabled = false;
-                } else {
-                    statusEl.innerHTML = `<span style="color: var(--error-color); font-weight: bold;">Statut: INACTIF</span>`;
-                    document.getElementById('set-trigger-btn').textContent = 'Planifier';
-                    document.getElementById('delete-trigger-btn').disabled = true;
-                }
-            })
-            .withFailureHandler(function (error) {
-                statusEl.innerHTML = `<span style="color: var(--error-color); font-weight: bold;">Erreur:</span> Impossible de lire l'état du déclencheur.`;
-            })
-            .getTriggerStatus();
+        google.script.run.withSuccessHandler(function (status) {
+            if (status.active) {
+                statusEl.innerHTML = `<span style="color: var(--success-color); font-weight: bold;">Statut: ACTIF</span> (${status.description})`;
+                document.getElementById('set-trigger-btn').textContent = 'Mettre à Jour';
+                document.getElementById('delete-trigger-btn').disabled = false;
+            } else {
+                statusEl.innerHTML = `<span style="color: var(--error-color); font-weight: bold;">Statut: INACTIF</span>`;
+                document.getElementById('set-trigger-btn').textContent = 'Planifier';
+                document.getElementById('delete-trigger-btn').disabled = true;
+            }
+        }).withFailureHandler(function (error) {
+            statusEl.innerHTML = `<span style="color: var(--error-color); font-weight: bold;">Erreur:</span> Impossible de lire l'état du déclencheur.`;
+        }).getTriggerStatus();
     }
 
     function handleScheduleManagementSubmit(e) {
@@ -51,91 +46,68 @@
         const form = e.target;
         const time = form.querySelector('#schedule-time').value;
         const day = form.querySelector('#schedule-day').value;
-
         document.getElementById('set-trigger-btn').disabled = true;
-
-        google.script.run
-            .withSuccessHandler(function (result) {
-                document.getElementById('set-trigger-btn').disabled = false;
-                if (result.success) {
-                    showNotification(result.message, 'success');
-                    checkAutomaticScheduleStatus();
-                } else {
-                    document.getElementById('schedule-message').textContent = result.message;
-                    document.getElementById('schedule-message').classList.remove('hidden');
-                }
-            })
-            .withFailureHandler(function (error) {
-                document.getElementById('set-trigger-btn').disabled = false;
-                showNotification("Erreur serveur lors de la planification: " + error.message, 'error');
-            })
-            .setOvertimeRequestTrigger(time, day);
+        google.script.run.withSuccessHandler(function (result) {
+            document.getElementById('set-trigger-btn').disabled = false;
+            if (result.success) {
+                showNotification(result.message, 'success');
+                checkAutomaticScheduleStatus();
+            } else {
+                document.getElementById('schedule-message').textContent = result.message;
+                document.getElementById('schedule-message').classList.remove('hidden');
+            }
+        }).withFailureHandler(function (error) {
+            document.getElementById('set-trigger-btn').disabled = false;
+            showNotification("Erreur serveur lors de la planification: " + error.message, 'error');
+        }).setOvertimeRequestTrigger(time, day);
     }
 
     function deleteAutomaticSchedule() {
-        if (!confirm("Êtes-vous sûr de vouloir supprimer la planification automatique hebdomadaire?")) {
-            return;
-        }
-
+        if (!confirm("Êtes-vous sûr de vouloir supprimer la planification automatique hebdomadaire?")) return;
         document.getElementById('delete-trigger-btn').disabled = true;
-
-        google.script.run
-            .withSuccessHandler(function (result) {
-                if (result.success) {
-                    showNotification(result.message, 'success');
-                    checkAutomaticScheduleStatus();
-                } else {
-                    showNotification("Erreur: " + result.message, 'error');
-                }
-            })
-            .withFailureHandler(function (error) {
-                showNotification("Erreur serveur lors de la suppression: " + error.message, 'error');
-            })
-            .deleteOvertimeRequestTrigger();
+        google.script.run.withSuccessHandler(function (result) {
+            if (result.success) {
+                showNotification(result.message, 'success');
+                checkAutomaticScheduleStatus();
+            } else {
+                showNotification("Erreur: " + result.message, 'error');
+            }
+        }).withFailureHandler(function (error) {
+            showNotification("Erreur serveur lors de la suppression: " + error.message, 'error');
+        }).deleteOvertimeRequestTrigger();
     }
 
     function loadCollaboratorEmails() {
         const select = document.getElementById('recipient-select');
         if (!select) return;
-
         select.innerHTML = '<option value="" disabled>Chargement des collaborateurs...</option>';
-
-        google.script.run
-            .withSuccessHandler(function (collaborators) {
-                select.innerHTML = ''; // Vider après succès
-
-                const collabList = collaborators.filter(c =>
-                    (String(c.role).toUpperCase() === 'COLLABORATOR' || String(c.role).toUpperCase() === 'COLLABORATEUR') &&
-                    String(c.code_centre) === String(currentUser.code_centre)
-                );
-
-                if (collabList.length === 0) {
-                    select.innerHTML = '<option value="" disabled>Aucun collaborateur trouvé dans ce centre.</option>';
-                    return;
-                }
-
-                collabList.forEach(c => {
-                    const option = document.createElement('option');
-                    option.value = c.email;
-                    option.textContent = `${c.prenom} ${c.nom} (${c.matricule})`;
-                    select.appendChild(option);
-                });
-            })
-            .withFailureHandler(function (error) {
-                showNotification("Erreur de chargement des collaborateurs pour l'envoi manuel: " + error.message, 'error');
-                select.innerHTML = '<option value="" disabled>Erreur de chargement.</option>';
-            })
-            .getAllCollaboratorsController();
+        google.script.run.withSuccessHandler(function (collaborators) {
+            select.innerHTML = '';
+            const collabList = collaborators.filter(c =>
+                (String(c.role).toUpperCase() === 'COLLABORATOR' || String(c.role).toUpperCase() === 'COLLABORATEUR') &&
+                String(c.code_centre) === String(currentUser.code_centre)
+            );
+            if (collabList.length === 0) {
+                select.innerHTML = '<option value="" disabled>Aucun collaborateur trouvé dans ce centre.</option>';
+                return;
+            }
+            collabList.forEach(c => {
+                const option = document.createElement('option');
+                option.value = c.email;
+                option.textContent = `${c.prenom} ${c.nom} (${c.matricule})`;
+                select.appendChild(option);
+            });
+        }).withFailureHandler(function (error) {
+            showNotification("Erreur de chargement des collaborateurs pour l'envoi manuel: " + error.message, 'error');
+            select.innerHTML = '<option value="" disabled>Erreur de chargement.</option>';
+        }).getAllCollaboratorsController();
     }
 
     function handleManualSendSubmit(e) {
         e.preventDefault();
-
         const isSendToAll = document.getElementById('send-to-all-checkbox').checked;
         const recipientSelect = document.getElementById('recipient-select');
-
         let emails = [];
-
         if (!isSendToAll) {
             emails = Array.from(recipientSelect.selectedOptions).map(option => option.value);
             if (emails.length === 0) {
@@ -144,47 +116,39 @@
                 return;
             }
         }
-
         document.getElementById('manual-send-message').classList.add('hidden');
         document.getElementById('manual-send-btn').disabled = true;
-
-        google.script.run
-            .withSuccessHandler(function (result) {
-                document.getElementById('manual-send-btn').disabled = false;
-                if (result.success) {
-                    showNotification(result.message, 'success');
-                    document.getElementById('manual-send-form').reset();
-                } else {
-                    document.getElementById('manual-send-message').textContent = result.message;
-                    document.getElementById('manual-send-message').classList.remove('hidden');
-                }
-            })
-            .withFailureHandler(function (error) {
-                document.getElementById('manual-send-btn').disabled = false;
-                showNotification("Erreur serveur lors de l'envoi manuel: " + error.message, 'error');
-            })
-            .sendOvertimeRequestEmails(isSendToAll ? null : emails, currentUser.prenom + ' ' + currentUser.nom);
+        google.script.run.withSuccessHandler(function (result) {
+            document.getElementById('manual-send-btn').disabled = false;
+            if (result.success) {
+                showNotification(result.message, 'success');
+                document.getElementById('manual-send-form').reset();
+            } else {
+                document.getElementById('manual-send-message').textContent = result.message;
+                document.getElementById('manual-send-message').classList.remove('hidden');
+            }
+        }).withFailureHandler(function (error) {
+            document.getElementById('manual-send-btn').disabled = false;
+            showNotification("Erreur serveur lors de l'envoi manuel: " + error.message, 'error');
+        }).sendOvertimeRequestEmails(isSendToAll ? null : emails, currentUser.prenom + ' ' + currentUser.nom);
     }
 
     // =========================================================================
-    // SECTION HORAIRES (SCHEDULES CRUD)
+    // SECTION HORAIRES
     // =========================================================================
 
     function loadSchedules() {
         const tbody = document.getElementById('schedules-list-body');
         tbody.innerHTML = '<tr><td colspan="5">Chargement des horaires de référence...</td></tr>';
-
-        google.script.run
-            .withSuccessHandler(function (schedules) {
-                tbody.innerHTML = '';
-                if (schedules.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5">Aucun horaire de référence configuré.</td></tr>';
-                    return;
-                }
-
-                schedules.forEach(item => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
+        google.script.run.withSuccessHandler(function (schedules) {
+            tbody.innerHTML = '';
+            if (schedules.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5">Aucun horaire de référence configuré.</td></tr>';
+                return;
+            }
+            schedules.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
                         <td>${item.codeCentre}</td>
                         <td>${item.startTime}</td>
                         <td>${item.endTime}</td>
@@ -194,10 +158,9 @@
                             <button onclick="deleteSchedulePrompt('${item.codeCentre}')" class="btn-secondary" style="background-color: var(--error-color); width: auto; padding: 5px 10px;">Supprimer</button>
                         </td>
                     `;
-                    tbody.appendChild(row);
-                });
-            })
-            .getSchedulesForManager();
+                tbody.appendChild(row);
+            });
+        }).getSchedulesForManager();
     }
 
     function handleScheduleSubmit(e) {
@@ -206,69 +169,57 @@
         const action = form.action.value;
         const errorEl = document.getElementById('schedule-form-error');
         errorEl.classList.add('hidden');
-
         const submitBtn = document.getElementById('schedule-submit-btn');
         submitBtn.disabled = true;
-
         const scheduleData = {
             codeCentre: form.codeCentre.value,
             startTime: form.startTime.value,
             endTime: form.endTime.value,
             pauseDurationMinutes: parseInt(form.pauseDurationMinutes.value, 10)
         };
-
-        google.script.run
-            .withSuccessHandler(function (result) {
-                submitBtn.disabled = false;
-                if (result.success) {
-                    showNotification(result.message, 'success');
-                    resetScheduleForm();
-                    document.getElementById('schedule-form-container').classList.add('hidden');
-                    loadSchedules();
-                } else {
-                    errorEl.textContent = result.error;
-                    errorEl.classList.remove('hidden');
-                }
-            })
-            .withFailureHandler(function (error) {
-                submitBtn.disabled = false;
-                errorEl.textContent = "Erreur du serveur: " + error.message;
+        google.script.run.withSuccessHandler(function (result) {
+            submitBtn.disabled = false;
+            if (result.success) {
+                showNotification(result.message, 'success');
+                resetScheduleForm();
+                document.getElementById('schedule-form-container').classList.add('hidden');
+                loadSchedules();
+            } else {
+                errorEl.textContent = result.error;
                 errorEl.classList.remove('hidden');
-            })
-            .manageSchedule(action, scheduleData);
+            }
+        }).withFailureHandler(function (error) {
+            submitBtn.disabled = false;
+            errorEl.textContent = "Erreur du serveur: " + error.message;
+            errorEl.classList.remove('hidden');
+        }).manageSchedule(action, scheduleData);
     }
 
     function editSchedule(codeCentre, startTime, endTime, pauseDurationMinutes) {
         const form = document.getElementById('schedule-form');
         const codeCentreInput = form.codeCentre;
-
         document.getElementById('schedule-form-title').textContent = 'Modifier';
         document.getElementById('schedule-form-action').value = 'UPDATE';
         document.getElementById('schedule-submit-btn').textContent = 'Mettre à jour';
-
         codeCentreInput.value = codeCentre;
         codeCentreInput.readOnly = true;
         codeCentreInput.style.backgroundColor = '#f0f0f0';
-
         form.startTime.value = startTime;
         form.endTime.value = endTime;
         form.pauseDurationMinutes.value = pauseDurationMinutes;
-
         document.getElementById('schedule-form-container').classList.remove('hidden');
     }
 
     function deleteSchedulePrompt(codeCentre) {
         if (confirm(`Êtes-vous sûr de vouloir supprimer l'horaire de référence pour le centre ${codeCentre} ?`)) {
-            google.script.run
-                .withSuccessHandler(function (result) {
-                    if (result.success) {
-                        showNotification(result.message, 'success');
-                        loadSchedules();
-                    } else {
-                        showNotification('Erreur lors de la suppression: ' + result.error, 'error');
-                    }
-                })
-                .manageSchedule('DELETE', { codeCentre: codeCentre });
+            google.script.run.withSuccessHandler(function (result) {
+                if (result.success) {
+                    showNotification(result.message, 'success');
+                    loadSchedules();
+                } else {
+                    showNotification('Erreur lors de la suppression: ' + result.error, 'error');
+                }
+            }).manageSchedule('DELETE', { codeCentre: codeCentre });
         }
     }
 
@@ -278,11 +229,9 @@
         document.getElementById('schedule-form-title').textContent = 'Ajouter';
         document.getElementById('schedule-form-action').value = 'CREATE';
         document.getElementById('schedule-submit-btn').textContent = 'Créer';
-
         const codeCentreInput = form.codeCentre;
         codeCentreInput.readOnly = false;
         codeCentreInput.style.backgroundColor = '';
-
         document.getElementById('schedule-form-container').classList.add('hidden');
         document.getElementById('schedule-form-error').classList.add('hidden');
     }
@@ -298,18 +247,25 @@
         google.script.run
             .withSuccessHandler(function (approvals) {
                 list.innerHTML = '';
-                if (approvals.length === 0) {
+
+                // Debug pour voir si on reçoit bien les données
+                console.log("Demandes reçues :", approvals);
+
+                if (!approvals || approvals.length === 0) {
                     list.innerHTML = '<p>Aucune demande de validation en attente pour votre centre.</p>';
                     return;
                 }
 
                 approvals.forEach(item => {
-                    const date = new Date(item.date_supp).toLocaleDateString('fr-FR');
+                    // MODIFIÉ : On affiche directement la date reçue (qui est déjà en texte)
+                    // Plus besoin de conversion complexe
+                    const dateDisplay = item.date_supp;
+
                     const approvalItem = document.createElement('div');
                     approvalItem.className = 'approval-item';
                     approvalItem.innerHTML = `
                         <p><strong>${item.prenom} ${item.nom}</strong> (${item.matricule}) - ${item.hours}h ${item.minutes}min</p>
-                        <p>Date: ${date} | Description: ${item.description}</p>
+                        <p>Date: ${dateDisplay} | Description: ${item.description}</p>
                         <div>
                             <button onclick="handleApprovalAction(${item.row_id}, 'APPROVE')" class="btn-primary" style="background-color: var(--success-color);">Approuver</button>
                             <button onclick="handleApprovalAction(${item.row_id}, 'REJECT')" class="btn-secondary" style="background-color: var(--error-color);">Rejeter</button>
@@ -319,7 +275,7 @@
                 });
             })
             .withFailureHandler(function (error) {
-                list.innerHTML = `<p class="error-message">Erreur de chargement: ${error}</p>`;
+                list.innerHTML = `<p class="error-message">Erreur de chargement: ${error.message}</p>`;
             })
             .getApprovals(currentUser.code_centre);
     }
@@ -371,7 +327,7 @@
     }
 
     // =========================================================================
-    // SECTION COLLABORATORS CRUD
+    // SECTION COLLABORATORS CRUD & HISTORY
     // =========================================================================
 
     function setupCollaboratorForm() {
@@ -393,6 +349,7 @@
         form.addEventListener('submit', handleCollabSubmit);
     }
 
+    // MODIFIÉ : Ajout du bouton "Historique"
     function loadCollaborators() {
         const tbody = document.getElementById('collaborators-list-body');
         tbody.innerHTML = '<tr><td colspan="6">Chargement des collaborateurs...</td></tr>';
@@ -414,6 +371,7 @@
                         <td>${item.code_centre}</td>
                         <td>${item.role}</td>
                         <td>
+                            <button onclick="viewCollaboratorHistory('${item.matricule}', '${item.nom}', '${item.prenom}')" class="btn-secondary" style="background-color: var(--info-color); width: auto; padding: 5px 10px; margin-right:5px;">Historique</button>
                             <button onclick="editCollaborator('${item.matricule}')" class="btn-secondary" style="margin-right: 5px; width: auto; padding: 5px 10px;">Editer</button>
                             <button onclick="deleteCollaboratorPrompt('${item.matricule}')" class="btn-secondary" style="background-color: var(--error-color); width: auto; padding: 5px 10px;">Supprimer</button>
                         </td>
@@ -426,6 +384,46 @@
             })
             .getAllCollaboratorsController();
     }
+
+    // NOUVEAU : Fonction pour voir l'historique dans le modal
+    function viewCollaboratorHistory(matricule, nom, prenom) {
+        const modal = document.getElementById('collab-history-modal');
+        const title = document.getElementById('history-modal-name');
+        const body = document.getElementById('collab-history-modal-body');
+
+        title.textContent = `${prenom} ${nom} (${matricule})`;
+        body.innerHTML = '<tr><td colspan="5">Chargement des données...</td></tr>';
+        modal.classList.remove('hidden');
+
+        google.script.run
+            .withSuccessHandler(function (history) {
+                body.innerHTML = '';
+                if (history.length === 0) {
+                    body.innerHTML = '<tr><td colspan="5">Aucun historique trouvé.</td></tr>';
+                    return;
+                }
+                history.forEach(item => {
+                    const date = new Date(item.date_supp).toLocaleDateString('fr-FR');
+                    const statusClass = item.status.toLowerCase().replace('_', '-');
+                    const displayStatus = item.status.replace('_', ' ');
+
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${date}</td>
+                        <td>${item.hours}h ${item.minutes}min</td>
+                        <td>${item.description}</td>
+                        <td><span class="status-badge status-${statusClass}">${displayStatus}</span></td>
+                        <td>${item.rejectionReason || '-'}</td>
+                    `;
+                    body.appendChild(row);
+                });
+            })
+            .withFailureHandler(function (error) {
+                body.innerHTML = `<tr><td colspan="5" class="error-message">Erreur: ${error.message}</td></tr>`;
+            })
+            .getCollaboratorHistoryForManager(matricule);
+    }
+
 
     function handleCollabSubmit(e) {
         e.preventDefault();

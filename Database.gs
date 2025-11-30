@@ -1,6 +1,6 @@
 /**
  * Database.gs
- * Handles all interactions with the Google Sheet, including CRUD for Collaborators and Overtime logs.
+ * Handles all interactions with the Google Sheet.
  */
 
 // CONFIGURATION
@@ -12,16 +12,11 @@ const SHEET_NAMES = {
   OVERTIME: 'SAISIES_HS' 
 };
 
-/**
- * Helper to get the Spreadsheet object.
- */
 function getSpreadsheet() {
   const ssId = PropertiesService.getScriptProperties().getProperty(SPREADSHEET_ID_KEY);
-  
   if (!ssId) {
      throw new Error("L'ID de la base de données n'a pas été configuré. L'application doit être initialisée.");
   }
-  
   const ss = SpreadsheetApp.openById(ssId);
   if (!ss) { 
       throw new Error("La feuille de calcul n'a pas pu être ouverte. Veuillez vérifier l'ID enregistré ou les permissions.");
@@ -29,16 +24,10 @@ function getSpreadsheet() {
   return ss;
 }
 
-/**
- * Stocke l'ID de la nouvelle feuille de calcul dans les propriétés du script.
- */
 function setSpreadsheetId(ssId) {
     PropertiesService.getScriptProperties().setProperty(SPREADSHEET_ID_KEY, ssId);
 }
 
-/**
- * Checks if the collaborators sheet has data beyond the header row.
- */
 function isSetupNeeded() {
   try {
     const ss = getSpreadsheet();
@@ -55,24 +44,17 @@ function isSetupNeeded() {
   }
 }
 
-/**
- * Crée les feuilles de calcul et définit les en-têtes si elles sont manquantes.
- * AJOUT : Colonne TOKEN dans COLLABORATEURS
- */
 function initializeDatabaseStructure(ss) {
-    // 1. COLLABORATEURS
     let collabSheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
     if (!collabSheet) {
         collabSheet = ss.insertSheet(SHEET_NAMES.COLLABORATORS);
     }
     if (collabSheet.getLastRow() < 1) {
-        // Ajout de la colonne TOKEN en position 7
         collabSheet.getRange(1, 1, 1, 7).setValues([
             ['ID_MATRICULE', 'NOM', 'PRENOM', 'EMAIL', 'CODE_CENTRE', 'ROLE', 'TOKEN']
         ]).setFontWeight('bold');
     }
 
-    // 2. HORAIRES_REF
     let scheduleSheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
     if (!scheduleSheet) {
         scheduleSheet = ss.insertSheet(SHEET_NAMES.SCHEDULES);
@@ -83,7 +65,6 @@ function initializeDatabaseStructure(ss) {
         ]).setFontWeight('bold');
     }
 
-    // 3. SAISIES_HS
     let overtimeSheet = ss.getSheetByName(SHEET_NAMES.OVERTIME);
     if (!overtimeSheet) {
         overtimeSheet = ss.insertSheet(SHEET_NAMES.OVERTIME);
@@ -104,28 +85,18 @@ function initializeDatabaseStructure(ss) {
 // COLLABORATOR (CRUD) Logic
 // =========================================================================
 
-/**
- * Génère un Token Unique (UUID simple).
- */
 function generateUniqueToken() {
   return Utilities.getUuid();
 }
 
-/**
- * Trouve un collaborateur par son TOKEN (Authentification magique).
- */
 function getCollaboratorByToken(token) {
   if (!token) return null;
-  
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
   const data = sheet.getDataRange().getValues();
   const headers = data.shift();
-  
   const headerMap = {};
   headers.forEach((h, i) => headerMap[String(h).trim()] = i);
-  
-  // Vérification de sécurité : si la colonne TOKEN n'existe pas encore
   if (typeof headerMap['TOKEN'] === 'undefined') return null;
   const tokenIndex = headerMap['TOKEN'];
 
@@ -146,34 +117,26 @@ function getCollaboratorByToken(token) {
   return null;
 }
 
-/**
- * Finds a collaborator by email or matricule.
- */
 function getCollaborator(identifier) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
   if (!sheet) {
       throw new Error("L'onglet de la feuille de calcul '" + SHEET_NAMES.COLLABORATORS + "' est introuvable.");
   }
-  
   const data = sheet.getDataRange().getValues();
   const headers = data.shift();
-  
   const headerMap = {};
   headers.forEach((h, i) => headerMap[String(h).trim()] = i);
-  
   const emailIndex = headerMap['EMAIL'];
   const matriculeIndex = headerMap['ID_MATRICULE'];
   const tokenIndex = headerMap['TOKEN'];
   
-  const normalizedIdentifier = String(identifier).toLowerCase();
+  const normalizedIdentifier = String(identifier).toLowerCase().trim();
   
   for (let i = 0; i < data.length; i++) {
     const row = data[i];
-    
-    // Match par Email ou Matricule
-    if ((String(row[emailIndex]).toLowerCase() === normalizedIdentifier) || 
-        (String(row[matriculeIndex]) === String(identifier))) {
+    if ((String(row[emailIndex]).toLowerCase().trim() === normalizedIdentifier) || 
+        (String(row[matriculeIndex]).trim() === String(identifier).trim())) {
       
       return {
         matricule: row[matriculeIndex],
@@ -189,13 +152,10 @@ function getCollaborator(identifier) {
   return null;
 }
 
-/**
- * Fetches all collaborators.
- */
 function getAllCollaborators() {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
-  const data = sheet.getDataRange().getValues();
+  const data = sheet.getDataRange().getDisplayValues(); // Utilise getDisplayValues pour tout avoir en String
   const headers = data.shift();
   
   const collaborators = [];
@@ -206,11 +166,11 @@ function getAllCollaborators() {
   for (let i = 0; i < data.length; i++) {
     const row = data[i];
     collaborators.push({
-      matricule: row[headerMap['ID_MATRICULE']],
+      matricule: String(row[headerMap['ID_MATRICULE']]).trim(), // Force String + Trim
       nom: row[headerMap['NOM']],
       prenom: row[headerMap['PRENOM']],
       email: row[headerMap['EMAIL']],
-      code_centre: row[headerMap['CODE_CENTRE']],
+      code_centre: String(row[headerMap['CODE_CENTRE']]).trim(), // Force String + Trim
       role: row[headerMap['ROLE']],
       token: (tokenIndex !== undefined) ? row[tokenIndex] : null
     });
@@ -218,15 +178,10 @@ function getAllCollaborators() {
   return collaborators;
 }
 
-/**
- * Creates a new collaborator (Génère un token automatiquement).
- */
 function createCollaborator(collabData) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
-  
   const newToken = generateUniqueToken();
-
   sheet.appendRow([
     collabData.matricule,
     collabData.nom,
@@ -234,15 +189,11 @@ function createCollaborator(collabData) {
     collabData.email,
     collabData.code_centre,
     collabData.role,
-    newToken // Ajout du Token
+    newToken 
   ]);
   return true;
 }
 
-/**
- * Updates an existing collaborator's data.
- * Si le token est vide, on en génère un nouveau pour réparer les anciens comptes.
- */
 function updateCollaborator(collabData) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
@@ -252,23 +203,17 @@ function updateCollaborator(collabData) {
   headers.forEach((h, i) => headerMap[String(h).trim()] = i);
 
   const matriculeIndex = headerMap['ID_MATRICULE'];
-  const tokenIndex = headerMap['TOKEN']; // Peut être undefined si vieille feuille
-
-  // Si la colonne TOKEN n'existe pas, il faudrait idéalement relancer l'initStructure, 
-  // mais ici on suppose que la structure est à jour.
+  const tokenIndex = headerMap['TOKEN']; 
   
   for (let i = 0; i < data.length; i++) {
     if (String(data[i][matriculeIndex]) == String(collabData.matricule)) {
       const rowIndex = i + 2;
-      
-      // Récupérer le token existant ou en créer un nouveau
       let currentToken = '';
       if (tokenIndex !== undefined) {
          currentToken = data[i][tokenIndex];
       }
       if (!currentToken) {
           currentToken = generateUniqueToken();
-          // Mettre à jour la cellule Token si elle était vide
           if (tokenIndex !== undefined) {
              sheet.getRange(rowIndex, tokenIndex + 1).setValue(currentToken);
           }
@@ -283,8 +228,6 @@ function updateCollaborator(collabData) {
         collabData.role,
         currentToken
       ];
-      
-      // Mise à jour (attention à la largeur)
       sheet.getRange(rowIndex, 1, 1, rowToUpdate.length).setValues([rowToUpdate]);
       return true;
     }
@@ -292,18 +235,13 @@ function updateCollaborator(collabData) {
   return false;
 }
 
-/**
- * Deletes a collaborator row based on their Matricule.
- */
 function deleteCollaborator(matricule) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
   const data = sheet.getDataRange().getValues();
   const headers = data.shift();
-  
   const headerMap = {};
   headers.forEach((h, i) => headerMap[String(h).trim()] = i);
-
   const matriculeIndex = headerMap['ID_MATRICULE'];
   for (let i = 0; i < data.length; i++) {
     if (String(data[i][matriculeIndex]) == String(matricule)) {
@@ -316,7 +254,7 @@ function deleteCollaborator(matricule) {
 }
 
 // =========================================================================
-// SCHEDULES & OVERTIME (CRUD) - Reste inchangé, mais copié pour complétude
+// SCHEDULES & OVERTIME (CRUD)
 // =========================================================================
 
 function getRefSchedule(codeCentre) {
@@ -328,9 +266,11 @@ function getRefSchedule(codeCentre) {
   const headerMap = {};
   headers.forEach((h, i) => headerMap[String(h).trim()] = i);
   const centreIndex = headerMap['CODE_CENTRE'];
+  const target = String(codeCentre).trim().toLowerCase();
+  
   for (let i = 0; i < data.length; i++) {
     const row = data[i];
-    if (String(row[centreIndex]) === String(codeCentre)) {
+    if (String(row[centreIndex]).trim().toLowerCase() === target) {
       return {
         startTime: row[headerMap['HEURE_DEBUT_STD']],
         endTime: row[headerMap['HEURE_FIN_STD']],
@@ -434,6 +374,9 @@ function logOvertime(overtimeData) {
   return true;
 }
 
+/**
+ * MODIFIÉ : Ajout du formatage de Date pour éviter l'erreur de transport.
+ */
 function getOvertimeHistory(matricule) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.OVERTIME);
@@ -443,12 +386,25 @@ function getOvertimeHistory(matricule) {
   const headerMap = {};
   headers.forEach((h, i) => headerMap[String(h).trim()] = i);
   const matriculeIndex = headerMap['COLLAB_MATRICULE'];
+  
+  const targetMatricule = String(matricule).trim().toUpperCase();
+  const timeZone = ss.getSpreadsheetTimeZone(); // Nécessaire pour le formatage
+
   for (let i = 0; i < data.length; i++) {
     const row = data[i];
-    if (String(row[matriculeIndex]) === String(matricule)) {
+    if (String(row[matriculeIndex]).trim().toUpperCase() === targetMatricule) {
+      // CORRECTION DATE ICI
+      let rawDate = row[headerMap['DATE_HEURES_SUPP']];
+      let dateStr = "";
+      if (rawDate instanceof Date) {
+          dateStr = Utilities.formatDate(rawDate, timeZone, "dd/MM/yyyy");
+      } else {
+          dateStr = String(rawDate);
+      }
+
       history.push({
         row_id: i + 2,
-        date_supp: row[headerMap['DATE_HEURES_SUPP']],
+        date_supp: dateStr, // Date formatée en texte
         hours: row[headerMap['HEURES']],
         minutes: row[headerMap['MINUTES']],
         description: row[headerMap['DESCRIPTION']],
@@ -457,7 +413,17 @@ function getOvertimeHistory(matricule) {
       });
     }
   }
-  history.sort((a, b) => new Date(b.date_supp).getTime() - new Date(a.date_supp).getTime());
+  // Tri sur la date (string -> date obj pour le tri uniquement)
+  history.sort((a, b) => {
+     // Conversion rapide dd/mm/yyyy pour le tri
+     const parseDate = (d) => {
+         if (!d) return 0;
+         const parts = d.split('/');
+         return new Date(parts[2], parts[1]-1, parts[0]).getTime();
+     };
+     return parseDate(b.date_supp) - parseDate(a.date_supp);
+  });
+  
   return history;
 }
 
@@ -470,17 +436,34 @@ function getPendingApprovals(managerCodeCentre) {
   headers.forEach((h, i) => headerMap[String(h).trim()] = i);
   const statusIndex = headerMap['STATUT'];
   const pending = [];
+  
+  const clean = (val) => String(val || '').trim().toUpperCase();
+  const targetCentre = clean(managerCodeCentre);
+
   const allCollaborators = getAllCollaborators(); 
-  const centreCollaborators = allCollaborators.filter(c => String(c.code_centre) === String(managerCodeCentre));
-  const validMatricules = centreCollaborators.map(c => String(c.matricule));
+  const centreCollaborators = allCollaborators.filter(c => clean(c.code_centre) === targetCentre);
+  const validMatricules = centreCollaborators.map(c => clean(c.matricule));
+
+  const timeZone = ss.getSpreadsheetTimeZone();
+
   for (let i = 0; i < data.length; i++) {
     const row = data[i];
-    const matricule = String(row[headerMap['COLLAB_MATRICULE']]);
-    if (row[statusIndex] === 'EN_ATTENTE' && validMatricules.includes(matricule)) {
+    const matricule = clean(row[headerMap['COLLAB_MATRICULE']]);
+    const status = clean(row[statusIndex]);
+
+    if (status === 'EN_ATTENTE' && validMatricules.includes(matricule)) {
+      let rawDate = row[headerMap['DATE_HEURES_SUPP']];
+      let dateStr = "";
+      if (rawDate instanceof Date) {
+          dateStr = Utilities.formatDate(rawDate, timeZone, "dd/MM/yyyy");
+      } else {
+          dateStr = String(rawDate);
+      }
+
       pending.push({
         row_id: i + 2,
-        date_supp: row[headerMap['DATE_HEURES_SUPP']],
-        matricule: matricule,
+        date_supp: dateStr, 
+        matricule: row[headerMap['COLLAB_MATRICULE']],
         nom: row[headerMap['COLLAB_NOM']],
         prenom: row[headerMap['COLLAB_PRENOM']],
         hours: row[headerMap['HEURES']],
@@ -530,7 +513,11 @@ function getCollaboratorStats(matricule) {
 
   history.forEach(entry => {
     if (entry.status === 'REJETE') return;
-    const entryDate = new Date(entry.date_supp);
+    
+    // Parsing date manuelle car format string dd/MM/yyyy
+    const parts = entry.date_supp.split('/');
+    const entryDate = new Date(parts[2], parts[1]-1, parts[0]);
+    
     const totalEntryMinutes = (parseInt(entry.hours) * 60) + parseInt(entry.minutes);
     if (entryDate.getFullYear() === currentYear) {
       stats.yearlyMinutes += totalEntryMinutes;

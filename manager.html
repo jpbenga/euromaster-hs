@@ -199,3 +199,32 @@
         </div>
     </div>
 </div>
+
+<div id="collab-history-modal" class="modal-overlay hidden">
+    <div class="modal-content" style="max-width: 800px; width: 95%;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <h3>Historique : <span id="history-modal-name"></span></h3>
+            <button class="btn-secondary"
+                onclick="document.getElementById('collab-history-modal').classList.add('hidden')"
+                style="width:auto;">Fermer</button>
+        </div>
+        <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
+            <table style="width:100%;">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Durée</th>
+                        <th>Motif</th>
+                        <th>Statut</th>
+                        <th>Infos Rejet</th>
+                    </tr>
+                </thead>
+                <tbody id="collab-history-modal-body">
+                    <tr>
+                        <td colspan="5">Chargement...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

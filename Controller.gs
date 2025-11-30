@@ -20,22 +20,16 @@ function getInitialAppStatus() {
   }
 }
 
-/**
- * Authentifie l'utilisateur.
- * MODIFIÉ : Accepte un 'token' optionnel pour les collaborateurs sans compte Google.
- */
 function authenticateUser(token) {
   try {
     let collaborator = null;
 
-    // 1. Essai d'auth par Token (Prioritaire si fourni)
     if (token) {
         collaborator = getCollaboratorByToken(token);
         if (!collaborator) {
              return { route: 'ERROR', message: "Lien invalide ou expiré.", status: 'ERROR' };
         }
     } 
-    // 2. Essai d'auth Google (Fallback pour Managers)
     else {
         const userEmail = Session.getActiveUser().getEmail();
         if (userEmail) {
@@ -46,10 +40,6 @@ function authenticateUser(token) {
     if (collaborator) {
       const role = String(collaborator.role).toUpperCase();
       let route;
-      
-      // Sécurité : Un Manager doit de préférence utiliser Google Auth, 
-      // mais techniquement le token peut ouvrir la vue Manager si on le permet.
-      // Ici, on laisse l'accès basé sur le rôle défini en BDD.
       
       if (role === 'ADMIN' || role === 'MANAGER') {
         route = 'MANAGER_VIEW';
@@ -65,7 +55,6 @@ function authenticateUser(token) {
         status: 'OK'
       };
     } else {
-      // Cas où ni Token valide ni Auth Google reconnue
       return { 
         route: 'NOT_FOUND', 
         status: 'ERROR', 
@@ -94,7 +83,6 @@ function completeSetup(setupData) {
             pauseDurationMinutes: setupData.dureePause
         });
 
-        // L'admin doit utiliser son email Google pour se connecter la première fois
         const adminEmail = Session.getActiveUser().getEmail();
         createCollaborator({
             matricule: setupData.matricule,
@@ -123,7 +111,6 @@ function sendOvertimeRequestEmails(emails, senderName) {
     let recipients = [];
     const allCollaborators = getAllCollaborators();
     
-    // Récupération dynamique de l'URL de base
     const appUrl = ScriptApp.getService().getUrl(); 
 
     if (isManual) {
@@ -142,10 +129,6 @@ function sendOvertimeRequestEmails(emails, senderName) {
     let sentCount = 0;
     
     recipients.forEach(collaborator => {
-        // AJOUT : Construction du lien personnalisé avec TOKEN
-        // Si le collaborateur n'a pas de token (vieux compte), on ne peut pas générer le lien.
-        // updateCollaborator devrait être appelé avant ou au fil de l'eau.
-        
         let personalLink = appUrl;
         if (collaborator.token) {
             personalLink += `?token=${collaborator.token}`;
@@ -263,9 +246,6 @@ function calculateOvertimeDuration(startTime, endTime, codeCentre) {
 
 function logOvertimeEntry(formObject) {
   try {
-    // Si l'utilisateur est connecté via token (pas de session google), on doit s'assurer que le matricule correspond
-    // Cette vérification est implicite car on utilise le matricule envoyé par le formulaire
-    // qui a été pré-rempli lors de l'auth.
     const calculated = calculateOvertimeDuration(
       formObject.startTime, 
       formObject.endTime, 
@@ -291,17 +271,11 @@ function getHistory(matricule) {
   return getOvertimeHistory(matricule);
 }
 
-/**
- * Récupère les stats. 
- * MODIFIÉ pour accepter le matricule directement si on utilise le mode Token.
- * Si matricule est null, on tente de le trouver via email (Manager).
- */
 function getMyStats(matriculeOverride) {
     if (matriculeOverride) {
         return getCollaboratorStats(matriculeOverride);
     }
     
-    // Fallback pour Manager connecté par Google
     const userEmail = Session.getActiveUser().getEmail();
     const collaborator = getCollaborator(userEmail);
     if(collaborator) {
@@ -329,9 +303,30 @@ function getApprovals(managerCodeCentre) {
   return getPendingApprovals(managerCodeCentre);
 }
 
+function getCollaboratorHistoryForManager(targetMatricule) {
+  try {
+    const userEmail = Session.getActiveUser().getEmail();
+    const manager = getCollaborator(userEmail);
+    
+    if (!manager || (String(manager.role) !== 'MANAGER' && String(manager.role) !== 'ADMIN')) {
+        throw new Error("Accès refusé. Vous n'avez pas les droits de manager.");
+    }
+    
+    return getOvertimeHistory(targetMatricule);
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+/**
+ * MODIFIÉ : Correction du BUG 'APPROUVE' vs 'APPROVE'.
+ * Accepte désormais les deux orthographes.
+ */
 function handleApproval(rowId, action, managerMatricule, rejectionReason) {
   try {
-    let status = action === 'APPROUVE' ? 'APPROUVE' : 'REJETE';
+    // CORRECTION ICI : "Ou logique" pour accepter les deux versions
+    let status = (action === 'APPROUVE' || action === 'APPROVE') ? 'APPROUVE' : 'REJETE';
+    
     if (action === 'REJECT' && !rejectionReason) {
         throw new Error('Le motif de rejet est obligatoire.');
     }

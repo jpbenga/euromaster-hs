@@ -103,11 +103,24 @@
 
     /**
      * Gère la déconnexion côté client et le retour à l'écran de choix.
+     * MODIFIÉ: Nettoie l'URL pour éviter la reconnexion automatique par token.
      */
     function handleDisconnect() {
         if (confirm('Voulez-vous vraiment vous déconnecter?')) {
             currentUser = null;
 
+            // Nettoyage de l'URL (suppression du token) sans rechargement
+            if (window.history.replaceState) {
+                const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+                window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
+            }
+
+            // Réinitialisation de la variable globale token injectée (pour scripts_auth)
+            if (typeof globalToken !== 'undefined') {
+                globalToken = null;
+            }
+
+            showView('loading-view');
             google.script.run
                 .withSuccessHandler(handleInitialStatus)
                 .withFailureHandler(handleServerError)
