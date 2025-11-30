@@ -1,0 +1,159 @@
+<script>
+    // Global State
+    let currentUser = null;
+
+    // DOM Elements (Définition complète)
+    const views = {
+        'loading-view': document.getElementById('loading-view'),
+        'login-view': document.getElementById('login-view'),
+        'choice-view': document.getElementById('choice-view'),
+        'setup-view': document.getElementById('setup-view'),
+        'collaborator-view': document.getElementById('collaborator-view'),
+        'manager-view': document.getElementById('manager-view')
+    };
+
+    const elements = {
+        notificationContainer: document.getElementById('notification-container'),
+        rejectionModal: document.getElementById('rejection-modal'),
+        rejectionForm: document.getElementById('rejection-form'),
+        rejectionSubmitBtn: document.getElementById('rejection-submit-btn'),
+
+        setupForm: document.getElementById('setup-form'),
+        setupSubmitBtn: document.getElementById('setup-submit-btn'),
+        setupErrorEl: document.getElementById('setup-error'),
+
+        loginButton: document.getElementById('login-button'),
+        setupButton: document.getElementById('setup-button'),
+        choiceErrorEl: document.getElementById('choice-error'),
+
+        scheduleForm: document.getElementById('schedule-management-form'),
+        manualSendForm: document.getElementById('manual-send-form'),
+        recipientSelect: document.getElementById('recipient-select'),
+        sendToAllCheckbox: document.getElementById('send-to-all-checkbox'),
+        triggerStatusEl: document.getElementById('trigger-status')
+    };
+
+    // =========================================================================
+    // INITIALIZATION & CORE ROUTING
+    // =========================================================================
+
+    document.addEventListener('DOMContentLoaded', function () {
+        showView('loading-view');
+
+        google.script.run
+            .withSuccessHandler(handleInitialStatus)
+            .withFailureHandler(handleServerError)
+            .getInitialAppStatus();
+
+        // Écouteurs globaux
+        if (elements.rejectionForm) elements.rejectionForm.addEventListener('submit', handleRejectionSubmit);
+        if (elements.setupForm) elements.setupForm.addEventListener('submit', handleSetupSubmit);
+
+        // Écouteurs spécifiques (vérification de l'existence des éléments)
+        if (elements.scheduleForm) {
+            elements.scheduleForm.addEventListener('submit', handleScheduleManagementSubmit);
+            if (elements.manualSendForm) elements.manualSendForm.addEventListener('submit', handleManualSendSubmit);
+        }
+    });
+
+    /**
+     * Cache toutes les vues et affiche la vue demandée.
+     * @param {string} viewName - L'ID de la vue à afficher.
+     */
+    function showView(viewName) {
+        Object.values(views).forEach(el => {
+            if (el) el.classList.add('hidden');
+        });
+        if (views[viewName]) {
+            views[viewName].classList.remove('hidden');
+        } else {
+            console.error("Vue non trouvée:", viewName);
+        }
+    }
+
+    // =========================================================================
+    // UTILS (NOTIFICATIONS, BDD LINK, ERROR HANDLING)
+    // =========================================================================
+
+    function showNotification(message, type = 'info') {
+        const notif = document.createElement('div');
+        notif.className = `notification ${type}`;
+        notif.textContent = message;
+
+        elements.notificationContainer.appendChild(notif);
+
+        setTimeout(() => {
+            if (notif && notif.parentNode) {
+                notif.parentNode.removeChild(notif);
+            }
+        }, 5000);
+    }
+
+    /**
+     * Gère les erreurs renvoyées par google.script.run.
+     * @param {Error} error - L'objet Error renvoyé par le serveur.
+     */
+    function handleServerError(error) {
+        showView('login-view');
+        const errorEl = document.getElementById('login-error');
+        errorEl.textContent = "Erreur de connexion au serveur. Veuillez réessayer ou vérifier votre déploiement. Détail: " + error.message;
+        errorEl.classList.remove('hidden');
+        console.error("Erreur Serveur (Google Script):", error.message);
+    }
+
+    /**
+     * Gère la déconnexion côté client et le retour à l'écran de choix.
+     */
+    function handleDisconnect() {
+        if (confirm('Voulez-vous vraiment vous déconnecter?')) {
+            currentUser = null;
+
+            google.script.run
+                .withSuccessHandler(handleInitialStatus)
+                .withFailureHandler(handleServerError)
+                .getInitialAppStatus();
+        }
+    }
+
+    /**
+     * Charge l'ID et le lien de la feuille de calcul générée.
+     */
+    function loadSpreadsheetInfo() {
+        google.script.run
+            .withSuccessHandler(function (info) {
+                const linkHtml = `<a href="${info.url}" target="_blank">${info.id}</a>`;
+
+                const managerLinkEl = document.getElementById('bdd-link-manager');
+                if (managerLinkEl) {
+                    managerLinkEl.innerHTML = linkHtml;
+                }
+
+                const collabLinkEl = document.getElementById('bdd-link-collaborator');
+                if (collabLinkEl) {
+                    collabLinkEl.innerHTML = linkHtml;
+                }
+            })
+            .withFailureHandler(function (error) {
+                showNotification("Erreur lors du chargement de l'ID BDD.", 'error');
+            })
+            .getSpreadsheetInfo();
+    }
+
+    // Fonctions Modales (Doivent être définies ici pour être globales)
+    function showRejectionModal(rowId) {
+        if (elements.rejectionModal) {
+            document.getElementById('rejection-entry-id').value = rowId;
+            elements.rejectionModal.classList.remove('hidden');
+            document.getElementById('rejection-reason').focus();
+        }
+    }
+
+    function hideRejectionModal() {
+        if (elements.rejectionModal) {
+            elements.rejectionModal.classList.add('hidden');
+            elements.rejectionForm.reset();
+            document.getElementById('rejection-submit-btn').disabled = false;
+        }
+    }
+
+</script>

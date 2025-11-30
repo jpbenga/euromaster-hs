@@ -1,0 +1,531 @@
+<script>
+    // Dépendances: scripts_core.html (currentUser, showNotification, loadSpreadsheetInfo, handleServerError, showView)
+
+    // =========================================================================
+    // MANAGER INITIALIZATION
+    // =========================================================================
+
+    function initManagerView() {
+        document.getElementById('manager-name').textContent = currentUser.prenom + ' ' + currentUser.nom;
+        document.getElementById('manager-centre-code').textContent = currentUser.code_centre;
+        loadPendingApprovals();
+
+        setupCollaboratorForm();
+        loadCollaborators();
+        loadSpreadsheetInfo();
+        loadSchedules();
+        checkAutomaticScheduleStatus();
+        loadCollaboratorEmails();
+    }
+
+    // =========================================================================
+    // SECTION COMMUNICATION & RAPPELS (Triggers)
+    // =========================================================================
+
+    function checkAutomaticScheduleStatus() {
+        const statusEl = document.getElementById('trigger-status');
+        if (!statusEl) return;
+
+        statusEl.innerHTML = 'Statut: Vérification...';
+
+        google.script.run
+            .withSuccessHandler(function (status) {
+                if (status.active) {
+                    statusEl.innerHTML = `<span style="color: var(--success-color); font-weight: bold;">Statut: ACTIF</span> (${status.description})`;
+                    document.getElementById('set-trigger-btn').textContent = 'Mettre à Jour';
+                    document.getElementById('delete-trigger-btn').disabled = false;
+                } else {
+                    statusEl.innerHTML = `<span style="color: var(--error-color); font-weight: bold;">Statut: INACTIF</span>`;
+                    document.getElementById('set-trigger-btn').textContent = 'Planifier';
+                    document.getElementById('delete-trigger-btn').disabled = true;
+                }
+            })
+            .withFailureHandler(function (error) {
+                statusEl.innerHTML = `<span style="color: var(--error-color); font-weight: bold;">Erreur:</span> Impossible de lire l'état du déclencheur.`;
+            })
+            .getTriggerStatus();
+    }
+
+    function handleScheduleManagementSubmit(e) {
+        e.preventDefault();
+        const form = e.target;
+        const time = form.querySelector('#schedule-time').value;
+        const day = form.querySelector('#schedule-day').value;
+
+        document.getElementById('set-trigger-btn').disabled = true;
+
+        google.script.run
+            .withSuccessHandler(function (result) {
+                document.getElementById('set-trigger-btn').disabled = false;
+                if (result.success) {
+                    showNotification(result.message, 'success');
+                    checkAutomaticScheduleStatus();
+                } else {
+                    document.getElementById('schedule-message').textContent = result.message;
+                    document.getElementById('schedule-message').classList.remove('hidden');
+                }
+            })
+            .withFailureHandler(function (error) {
+                document.getElementById('set-trigger-btn').disabled = false;
+                showNotification("Erreur serveur lors de la planification: " + error.message, 'error');
+            })
+            .setOvertimeRequestTrigger(time, day);
+    }
+
+    function deleteAutomaticSchedule() {
+        if (!confirm("Êtes-vous sûr de vouloir supprimer la planification automatique hebdomadaire?")) {
+            return;
+        }
+
+        document.getElementById('delete-trigger-btn').disabled = true;
+
+        google.script.run
+            .withSuccessHandler(function (result) {
+                if (result.success) {
+                    showNotification(result.message, 'success');
+                    checkAutomaticScheduleStatus();
+                } else {
+                    showNotification("Erreur: " + result.message, 'error');
+                }
+            })
+            .withFailureHandler(function (error) {
+                showNotification("Erreur serveur lors de la suppression: " + error.message, 'error');
+            })
+            .deleteOvertimeRequestTrigger();
+    }
+
+    function loadCollaboratorEmails() {
+        const select = document.getElementById('recipient-select');
+        if (!select) return;
+
+        select.innerHTML = '<option value="" disabled>Chargement des collaborateurs...</option>';
+
+        google.script.run
+            .withSuccessHandler(function (collaborators) {
+                select.innerHTML = ''; // Vider après succès
+
+                const collabList = collaborators.filter(c =>
+                    (String(c.role).toUpperCase() === 'COLLABORATOR' || String(c.role).toUpperCase() === 'COLLABORATEUR') &&
+                    String(c.code_centre) === String(currentUser.code_centre)
+                );
+
+                if (collabList.length === 0) {
+                    select.innerHTML = '<option value="" disabled>Aucun collaborateur trouvé dans ce centre.</option>';
+                    return;
+                }
+
+                collabList.forEach(c => {
+                    const option = document.createElement('option');
+                    option.value = c.email;
+                    option.textContent = `${c.prenom} ${c.nom} (${c.matricule})`;
+                    select.appendChild(option);
+                });
+            })
+            .withFailureHandler(function (error) {
+                showNotification("Erreur de chargement des collaborateurs pour l'envoi manuel: " + error.message, 'error');
+                select.innerHTML = '<option value="" disabled>Erreur de chargement.</option>';
+            })
+            .getAllCollaboratorsController();
+    }
+
+    function handleManualSendSubmit(e) {
+        e.preventDefault();
+
+        const isSendToAll = document.getElementById('send-to-all-checkbox').checked;
+        const recipientSelect = document.getElementById('recipient-select');
+
+        let emails = [];
+
+        if (!isSendToAll) {
+            emails = Array.from(recipientSelect.selectedOptions).map(option => option.value);
+            if (emails.length === 0) {
+                document.getElementById('manual-send-message').textContent = "Veuillez sélectionner au moins un collaborateur ou cocher 'Envoyer à TOUS'.";
+                document.getElementById('manual-send-message').classList.remove('hidden');
+                return;
+            }
+        }
+
+        document.getElementById('manual-send-message').classList.add('hidden');
+        document.getElementById('manual-send-btn').disabled = true;
+
+        google.script.run
+            .withSuccessHandler(function (result) {
+                document.getElementById('manual-send-btn').disabled = false;
+                if (result.success) {
+                    showNotification(result.message, 'success');
+                    document.getElementById('manual-send-form').reset();
+                } else {
+                    document.getElementById('manual-send-message').textContent = result.message;
+                    document.getElementById('manual-send-message').classList.remove('hidden');
+                }
+            })
+            .withFailureHandler(function (error) {
+                document.getElementById('manual-send-btn').disabled = false;
+                showNotification("Erreur serveur lors de l'envoi manuel: " + error.message, 'error');
+            })
+            .sendOvertimeRequestEmails(isSendToAll ? null : emails, currentUser.prenom + ' ' + currentUser.nom);
+    }
+
+    // =========================================================================
+    // SECTION HORAIRES (SCHEDULES CRUD)
+    // =========================================================================
+
+    function loadSchedules() {
+        const tbody = document.getElementById('schedules-list-body');
+        tbody.innerHTML = '<tr><td colspan="5">Chargement des horaires de référence...</td></tr>';
+
+        google.script.run
+            .withSuccessHandler(function (schedules) {
+                tbody.innerHTML = '';
+                if (schedules.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5">Aucun horaire de référence configuré.</td></tr>';
+                    return;
+                }
+
+                schedules.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${item.codeCentre}</td>
+                        <td>${item.startTime}</td>
+                        <td>${item.endTime}</td>
+                        <td>${item.pauseDurationMinutes} min</td>
+                        <td>
+                            <button onclick="editSchedule('${item.codeCentre}', '${item.startTime}', '${item.endTime}', ${item.pauseDurationMinutes})" class="btn-secondary" style="width: auto; padding: 5px 10px; margin-right: 5px;">Éditer</button>
+                            <button onclick="deleteSchedulePrompt('${item.codeCentre}')" class="btn-secondary" style="background-color: var(--error-color); width: auto; padding: 5px 10px;">Supprimer</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            })
+            .getSchedulesForManager();
+    }
+
+    function handleScheduleSubmit(e) {
+        e.preventDefault();
+        const form = e.target;
+        const action = form.action.value;
+        const errorEl = document.getElementById('schedule-form-error');
+        errorEl.classList.add('hidden');
+
+        const submitBtn = document.getElementById('schedule-submit-btn');
+        submitBtn.disabled = true;
+
+        const scheduleData = {
+            codeCentre: form.codeCentre.value,
+            startTime: form.startTime.value,
+            endTime: form.endTime.value,
+            pauseDurationMinutes: parseInt(form.pauseDurationMinutes.value, 10)
+        };
+
+        google.script.run
+            .withSuccessHandler(function (result) {
+                submitBtn.disabled = false;
+                if (result.success) {
+                    showNotification(result.message, 'success');
+                    resetScheduleForm();
+                    document.getElementById('schedule-form-container').classList.add('hidden');
+                    loadSchedules();
+                } else {
+                    errorEl.textContent = result.error;
+                    errorEl.classList.remove('hidden');
+                }
+            })
+            .withFailureHandler(function (error) {
+                submitBtn.disabled = false;
+                errorEl.textContent = "Erreur du serveur: " + error.message;
+                errorEl.classList.remove('hidden');
+            })
+            .manageSchedule(action, scheduleData);
+    }
+
+    function editSchedule(codeCentre, startTime, endTime, pauseDurationMinutes) {
+        const form = document.getElementById('schedule-form');
+        const codeCentreInput = form.codeCentre;
+
+        document.getElementById('schedule-form-title').textContent = 'Modifier';
+        document.getElementById('schedule-form-action').value = 'UPDATE';
+        document.getElementById('schedule-submit-btn').textContent = 'Mettre à jour';
+
+        codeCentreInput.value = codeCentre;
+        codeCentreInput.readOnly = true;
+        codeCentreInput.style.backgroundColor = '#f0f0f0';
+
+        form.startTime.value = startTime;
+        form.endTime.value = endTime;
+        form.pauseDurationMinutes.value = pauseDurationMinutes;
+
+        document.getElementById('schedule-form-container').classList.remove('hidden');
+    }
+
+    function deleteSchedulePrompt(codeCentre) {
+        if (confirm(`Êtes-vous sûr de vouloir supprimer l'horaire de référence pour le centre ${codeCentre} ?`)) {
+            google.script.run
+                .withSuccessHandler(function (result) {
+                    if (result.success) {
+                        showNotification(result.message, 'success');
+                        loadSchedules();
+                    } else {
+                        showNotification('Erreur lors de la suppression: ' + result.error, 'error');
+                    }
+                })
+                .manageSchedule('DELETE', { codeCentre: codeCentre });
+        }
+    }
+
+    function resetScheduleForm() {
+        const form = document.getElementById('schedule-form');
+        form.reset();
+        document.getElementById('schedule-form-title').textContent = 'Ajouter';
+        document.getElementById('schedule-form-action').value = 'CREATE';
+        document.getElementById('schedule-submit-btn').textContent = 'Créer';
+
+        const codeCentreInput = form.codeCentre;
+        codeCentreInput.readOnly = false;
+        codeCentreInput.style.backgroundColor = '';
+
+        document.getElementById('schedule-form-container').classList.add('hidden');
+        document.getElementById('schedule-form-error').classList.add('hidden');
+    }
+
+    // =========================================================================
+    // SECTION APPROBATIONS & VALIDATIONS
+    // =========================================================================
+
+    function loadPendingApprovals() {
+        const list = document.getElementById('approvals-list');
+        list.innerHTML = '<p>Chargement des demandes de votre centre...</p>';
+
+        google.script.run
+            .withSuccessHandler(function (approvals) {
+                list.innerHTML = '';
+                if (approvals.length === 0) {
+                    list.innerHTML = '<p>Aucune demande de validation en attente pour votre centre.</p>';
+                    return;
+                }
+
+                approvals.forEach(item => {
+                    const date = new Date(item.date_supp).toLocaleDateString('fr-FR');
+                    const approvalItem = document.createElement('div');
+                    approvalItem.className = 'approval-item';
+                    approvalItem.innerHTML = `
+                        <p><strong>${item.prenom} ${item.nom}</strong> (${item.matricule}) - ${item.hours}h ${item.minutes}min</p>
+                        <p>Date: ${date} | Description: ${item.description}</p>
+                        <div>
+                            <button onclick="handleApprovalAction(${item.row_id}, 'APPROVE')" class="btn-primary" style="background-color: var(--success-color);">Approuver</button>
+                            <button onclick="handleApprovalAction(${item.row_id}, 'REJECT')" class="btn-secondary" style="background-color: var(--error-color);">Rejeter</button>
+                        </div>
+                    `;
+                    list.appendChild(approvalItem);
+                });
+            })
+            .withFailureHandler(function (error) {
+                list.innerHTML = `<p class="error-message">Erreur de chargement: ${error}</p>`;
+            })
+            .getApprovals(currentUser.code_centre);
+    }
+
+    function handleApprovalAction(rowId, action) {
+        if (action === 'REJECT') {
+            showRejectionModal(rowId);
+        } else if (action === 'APPROVE') {
+            if (confirm('Confirmez-vous l\'approbation de cette demande ?')) {
+                processValidation(rowId, 'APPROVE', '');
+            }
+        }
+    }
+
+    function handleRejectionSubmit(e) {
+        e.preventDefault();
+
+        const form = e.target;
+        const reason = form.reason.value.trim();
+        const rowId = parseInt(form.entryId.value, 10);
+
+        if (reason) {
+            processValidation(rowId, 'REJECT', reason);
+        } else {
+            showNotification('Le motif de rejet ne peut pas être vide.', 'error');
+            document.getElementById('rejection-submit-btn').disabled = false;
+        }
+    }
+
+    function processValidation(rowId, action, reason) {
+        const managerMatricule = currentUser.matricule;
+
+        google.script.run
+            .withSuccessHandler(function (result) {
+                if (result.success) {
+                    showNotification(result.message, 'success');
+                    loadPendingApprovals();
+                    hideRejectionModal();
+                } else {
+                    showNotification("Erreur de validation: " + result.error, 'error');
+                }
+                document.getElementById('rejection-submit-btn').disabled = false;
+            })
+            .withFailureHandler(function (error) {
+                showNotification("Erreur serveur lors de la validation: " + error, 'error');
+                document.getElementById('rejection-submit-btn').disabled = false;
+            })
+            .handleApproval(rowId, action, managerMatricule, reason);
+    }
+
+    // =========================================================================
+    // SECTION COLLABORATORS CRUD
+    // =========================================================================
+
+    function setupCollaboratorForm() {
+        const formContainer = document.getElementById('collab-form-container');
+        const form = document.getElementById('collaborator-form');
+        const showBtn = document.getElementById('show-collab-form-btn');
+        const cancelBtn = document.getElementById('cancel-collab-form-btn');
+
+        showBtn.addEventListener('click', () => {
+            resetCollabForm();
+            formContainer.classList.remove('hidden');
+        });
+
+        cancelBtn.addEventListener('click', () => {
+            formContainer.classList.add('hidden');
+        });
+
+        form.removeEventListener('submit', handleCollabSubmit);
+        form.addEventListener('submit', handleCollabSubmit);
+    }
+
+    function loadCollaborators() {
+        const tbody = document.getElementById('collaborators-list-body');
+        tbody.innerHTML = '<tr><td colspan="6">Chargement des collaborateurs...</td></tr>';
+
+        google.script.run
+            .withSuccessHandler(function (list) {
+                tbody.innerHTML = '';
+                if (list.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6">Aucun collaborateur trouvé.</td></tr>';
+                    return;
+                }
+
+                list.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${item.matricule}</td>
+                        <td>${item.prenom} ${item.nom}</td>
+                        <td>${item.email}</td>
+                        <td>${item.code_centre}</td>
+                        <td>${item.role}</td>
+                        <td>
+                            <button onclick="editCollaborator('${item.matricule}')" class="btn-secondary" style="margin-right: 5px; width: auto; padding: 5px 10px;">Editer</button>
+                            <button onclick="deleteCollaboratorPrompt('${item.matricule}')" class="btn-secondary" style="background-color: var(--error-color); width: auto; padding: 5px 10px;">Supprimer</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            })
+            .withFailureHandler(function (error) {
+                tbody.innerHTML = `<tr><td colspan="6" class="error-message">Erreur de chargement: ${error}</td></tr>`;
+            })
+            .getAllCollaboratorsController();
+    }
+
+    function handleCollabSubmit(e) {
+        e.preventDefault();
+        const form = e.target;
+        const action = form.action.value;
+        const errorEl = document.getElementById('collab-form-error');
+        errorEl.classList.add('hidden');
+
+        const submitBtn = document.getElementById('collab-submit-btn');
+        submitBtn.disabled = true;
+
+        const collabData = {
+            matricule: form.matricule.value,
+            nom: form.nom.value,
+            prenom: form.prenom.value,
+            email: form.email.value,
+            code_centre: form.code_centre.value,
+            role: form.role.value
+        };
+
+        google.script.run
+            .withSuccessHandler(function (result) {
+                if (result.success) {
+                    showNotification('Collaborateur ' + (action === 'CREATE' ? 'créé' : 'mis à jour') + ' avec succès !', 'success');
+                    resetCollabForm();
+                    document.getElementById('collab-form-container').classList.add('hidden');
+                    loadCollaborators();
+                } else {
+                    errorEl.textContent = result.error;
+                    errorEl.classList.remove('hidden');
+                }
+                submitBtn.disabled = false;
+            })
+            .withFailureHandler(function (error) {
+                errorEl.textContent = "Erreur du serveur: " + error;
+                errorEl.classList.remove('hidden');
+                submitBtn.disabled = false;
+            })
+            .manageCollaborator(action, collabData);
+    }
+
+    function editCollaborator(matricule) {
+        google.script.run
+            .withSuccessHandler(function (list) {
+                const collab = list.find(c => c.matricule == matricule);
+                if (!collab) {
+                    showNotification('Erreur: Collaborateur non trouvé.', 'error');
+                    return;
+                }
+
+                const form = document.getElementById('collaborator-form');
+                document.getElementById('collab-form-title').textContent = 'Modifier';
+                document.getElementById('collab-form-action').value = 'UPDATE';
+                document.getElementById('collab-submit-btn').textContent = 'Mettre à jour';
+
+                const matriculeInput = document.getElementById('collab-matricule');
+                matriculeInput.readOnly = true;
+                matriculeInput.style.backgroundColor = '#f0f0f0';
+
+                form.matricule.value = collab.matricule;
+                form.nom.value = collab.nom;
+                form.prenom.value = collab.prenom;
+                form.email.value = collab.email;
+                form.code_centre.value = collab.code_centre;
+                form.role.value = collab.role;
+
+                document.getElementById('collab-form-container').classList.remove('hidden');
+            })
+            .getAllCollaboratorsController();
+    }
+
+    function deleteCollaboratorPrompt(matricule) {
+        if (confirm('Êtes-vous sûr de vouloir supprimer le collaborateur avec le matricule ' + matricule + ' ? Cette action est IRRÉVERSIBLE et supprime l\'accès à l\'application.')) {
+            google.script.run
+                .withSuccessHandler(function (result) {
+                    if (result.success) {
+                        showNotification('Collaborateur supprimé avec succès !', 'success');
+                        loadCollaborators();
+                    } else {
+                        showNotification('Erreur lors de la suppression: ' + result.error, 'error');
+                    }
+                })
+                .withFailureHandler(function (error) {
+                    showNotification("Erreur serveur lors de la suppression: " + error, 'error');
+                })
+                .manageCollaborator('DELETE', { matricule: matricule });
+        }
+    }
+
+    function resetCollabForm() {
+        const form = document.getElementById('collaborator-form');
+        form.reset();
+        document.getElementById('collab-form-title').textContent = 'Ajouter';
+        document.getElementById('collab-form-action').value = 'CREATE';
+        document.getElementById('collab-submit-btn').textContent = 'Créer';
+
+        const matriculeInput = document.getElementById('collab-matricule');
+        matriculeInput.readOnly = false;
+        matriculeInput.style.backgroundColor = '';
+
+        document.getElementById('collab-form-error').classList.add('hidden');
+    }
+</script>

@@ -33,8 +33,7 @@ function getSpreadsheet() {
 }
 
 /**
- * NOUVEAU: Stocke l'ID de la nouvelle feuille de calcul dans les propriétés du script.
- * Ceci lie cette installation Apps Script à sa BDD unique.
+ * Stocke l'ID de la nouvelle feuille de calcul dans les propriétés du script.
  * @param {string} ssId - The ID of the newly created Spreadsheet.
  */
 function setSpreadsheetId(ssId) {
@@ -58,11 +57,7 @@ function isSetupNeeded() {
     return sheet.getLastRow() <= 1; 
   } catch (e) {
       // Si getSpreadsheet échoue parce que l'ID n'est pas encore enregistré (cas normal au démarrage), le Setup est requis.
-      if (e.message.includes('ID de la base de données n\'a pas été configuré')) {
-          return true;
-      }
-      // Gère le cas où l'ID est là, mais la feuille ne peut pas être ouverte (ID invalide/supprimé)
-      if (e.message.includes('La feuille de calcul n\'a pas pu être ouverte')) {
+      if (e.message.includes('ID de la base de données n\'a pas été configuré') || e.message.includes('La feuille de calcul n\'a pas pu être ouverte')) {
           return true;
       }
       throw e;
@@ -118,9 +113,11 @@ function initializeDatabaseStructure(ss) {
 
 // =========================================================================
 // COLLABORATOR (CRUD) Logic
-// ... (Reste des fonctions inchangées)
 // =========================================================================
 
+/**
+ * Finds a collaborator by email or matricule.
+ */
 function getCollaborator(identifier) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
@@ -130,7 +127,7 @@ function getCollaborator(identifier) {
   }
   
   const data = sheet.getDataRange().getValues();
-  const headers = data.shift();
+  const headers = data.shift(); // Remove headers
   
   const headerMap = {};
   headers.forEach((h, i) => headerMap[String(h).trim()] = i); 
@@ -175,11 +172,14 @@ function getCollaborator(identifier) {
   return null;
 }
 
+/**
+ * Fetches all collaborators.
+ */
 function getAllCollaborators() {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
   const data = sheet.getDataRange().getValues();
-  const headers = data.shift();
+  const headers = data.shift(); // Remove headers
   
   const collaborators = [];
   
@@ -200,6 +200,9 @@ function getAllCollaborators() {
   return collaborators;
 }
 
+/**
+ * Creates a new collaborator.
+ */
 function createCollaborator(collabData) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
@@ -216,6 +219,9 @@ function createCollaborator(collabData) {
   return true;
 }
 
+/**
+ * Updates an existing collaborator's data based on their Matricule.
+ */
 function updateCollaborator(collabData) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
@@ -247,6 +253,9 @@ function updateCollaborator(collabData) {
   return false;
 }
 
+/**
+ * Deletes a collaborator row based on their Matricule.
+ */
 function deleteCollaborator(matricule) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.COLLABORATORS);
@@ -268,6 +277,13 @@ function deleteCollaborator(matricule) {
   return false;
 }
 
+// =========================================================================
+// SCHEDULES (HORAIRES_REF) Logic (Mise à jour avec nouvelles fonctions CRUD)
+// =========================================================================
+
+/**
+ * Fetches the reference schedule for a specific centre code.
+ */
 function getRefSchedule(codeCentre) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
@@ -294,10 +310,14 @@ function getRefSchedule(codeCentre) {
   return null;
 }
 
+/**
+ * Creates a new reference schedule for a center.
+ */
 function createRefSchedule(scheduleData) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
   
+  // CODE_CENTRE, HEURE_DEBUT_STD, HEURE_FIN_STD, DUREE_PAUSE
   sheet.appendRow([
     scheduleData.codeCentre,
     scheduleData.startTime,
@@ -308,10 +328,94 @@ function createRefSchedule(scheduleData) {
   return true;
 }
 
+/**
+ * Met à jour un horaire de référence existant pour un centre donné.
+ */
+function updateRefSchedule(scheduleData) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
+  const data = sheet.getDataRange().getValues();
+  const headers = data.shift();
+
+  const headerMap = {};
+  headers.forEach((h, i) => headerMap[String(h).trim()] = i);
+  const centreIndex = headerMap['CODE_CENTRE'];
+
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    if (String(row[centreIndex]) === String(scheduleData.codeCentre)) {
+      const rowIndex = i + 2; 
+
+      sheet.getRange(rowIndex, headerMap['HEURE_DEBUT_STD'] + 1).setValue(scheduleData.startTime);
+      sheet.getRange(rowIndex, headerMap['HEURE_FIN_STD'] + 1).setValue(scheduleData.endTime);
+      sheet.getRange(rowIndex, headerMap['DUREE_PAUSE'] + 1).setValue(scheduleData.pauseDurationMinutes);
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Supprime un horaire de référence pour un centre donné.
+ */
+function deleteRefSchedule(codeCentre) {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
+  const data = sheet.getDataRange().getValues();
+  const headers = data.shift();
+
+  const headerMap = {};
+  headers.forEach((h, i) => headerMap[String(h).trim()] = i);
+  const centreIndex = headerMap['CODE_CENTRE'];
+
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    if (String(row[centreIndex]) === String(codeCentre)) {
+      const rowIndex = i + 2; 
+      sheet.deleteRow(rowIndex);
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Récupère la liste de tous les horaires de référence.
+ */
+function getAllRefSchedules() {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.SCHEDULES);
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data.shift();
+
+  const schedules = [];
+  const headerMap = {};
+  headers.forEach((h, i) => headerMap[String(h).trim()] = i);
+
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    schedules.push({
+      codeCentre: row[headerMap['CODE_CENTRE']],
+      startTime: row[headerMap['HEURE_DEBUT_STD']],
+      endTime: row[headerMap['HEURE_FIN_STD']],
+      pauseDurationMinutes: row[headerMap['DUREE_PAUSE']]
+    });
+  }
+  return schedules;
+}
+
+
+// =========================================================================
+// OVERTIME (SAISIES_HS) Logic (Reste inchangé)
+// =========================================================================
+
 function logOvertime(overtimeData) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.OVERTIME);
   
+  // SCHEMA: DATE_SAISIE, DATE_HEURES_SUPP, COLLAB_MATRICULE, COLLAB_NOM, COLLAB_PRENOM, HEURES, MINUTES, DESCRIPTION, STATUT, DATE_VALIDATION, MANAGER_MATRICULE, MOTIF_REJET
   sheet.appendRow([
     new Date(), 
     overtimeData.date, 

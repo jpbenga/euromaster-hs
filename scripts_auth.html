@@ -1,0 +1,108 @@
+<script>
+    // Dépendances: scripts_core.html (showView, showNotification, handleServerError)
+
+    /**
+     * Gère la réponse de l'appel initial au serveur (getInitialAppStatus).
+     */
+    function handleInitialStatus(response) {
+        if (response.status === 'ERROR') {
+            document.getElementById('login-error').textContent = response.message;
+            document.querySelector('.login-card h2').textContent = 'Erreur Critique';
+            showView('login-view');
+            return;
+        }
+
+        showView('choice-view');
+
+        // Gérer l'affichage des boutons Setup/Login
+        if (response.setupNeeded) {
+            elements.setupButton.classList.add('btn-primary');
+            elements.setupButton.classList.remove('btn-secondary');
+            elements.loginButton.classList.add('btn-secondary');
+            elements.loginButton.classList.remove('btn-primary');
+        } else {
+            elements.setupButton.classList.add('btn-secondary');
+            elements.setupButton.classList.remove('btn-primary');
+            elements.loginButton.classList.add('btn-primary');
+            elements.loginButton.classList.remove('btn-secondary');
+        }
+    }
+
+    /**
+     * Tente d'authentifier l'utilisateur via google.script.run (déclenché par le clic utilisateur)
+     */
+    function tryLogin() {
+        elements.choiceErrorEl.classList.add('hidden');
+        showView('loading-view');
+
+        google.script.run
+            .withSuccessHandler(handleLoginSuccess)
+            .withFailureHandler(handleServerError)
+            .authenticateUser();
+    }
+
+    /**
+     * Gère la réponse de l'authentification.
+     */
+    function handleLoginSuccess(response) {
+        if (response.status === 'OK') {
+            // Stocker l'utilisateur globalement
+            currentUser = response.user;
+
+            // Router vers la bonne vue
+            if (response.route === 'MANAGER_VIEW') {
+                initManagerView();
+                showView('manager-view');
+            } else if (response.route === 'COLLABORATOR_VIEW') {
+                initCollaboratorView();
+                showView('collaborator-view');
+            }
+        } else if (response.route === 'NOT_FOUND') {
+            // Afficher l'erreur si l'email est connecté à Google mais non trouvé dans la BDD
+            elements.choiceErrorEl.textContent = response.message;
+            elements.choiceErrorEl.classList.remove('hidden');
+            showView('choice-view');
+        }
+    }
+
+    /**
+     * Gère la soumission du formulaire de configuration initiale.
+     */
+    function handleSetupSubmit(e) {
+        e.preventDefault();
+
+        const setupSubmitBtn = document.getElementById('setup-submit-btn');
+        setupSubmitBtn.disabled = true;
+        elements.setupErrorEl.classList.add('hidden');
+
+        const form = e.target;
+        const data = {
+            matricule: form.matricule.value,
+            nom: form.nom.value,
+            prenom: form.prenom.value,
+            codeCentre: form.codeCentre.value,
+            heureDebut: form.heureDebut.value,
+            heureFin: form.heureFin.value,
+            dureePause: form.dureePause.value
+        };
+
+        google.script.run
+            .withSuccessHandler(function (response) {
+                setupSubmitBtn.disabled = false;
+                if (response.status === 'SUCCESS') {
+                    showNotification(response.message, 'success');
+                    // Tenter la connexion immédiatement après le setup
+                    tryLogin();
+                } else {
+                    elements.setupErrorEl.textContent = response.message;
+                    elements.setupErrorEl.classList.remove('hidden');
+                }
+            })
+            .withFailureHandler(function (error) {
+                setupSubmitBtn.disabled = false;
+                elements.setupErrorEl.textContent = "Erreur serveur: " + error.message;
+                elements.setupErrorEl.classList.remove('hidden');
+            })
+            .completeSetup(data);
+    }
+</script>

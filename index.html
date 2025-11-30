@@ -45,14 +45,8 @@
     </div>
 
     <?!= include('setup'); ?>
-
-    <div id="collaborator-view" class="view hidden">
-      <?!= include('collaborator'); ?>
-    </div>
-
-    <div id="manager-view" class="view hidden">
-      <?!= include('manager'); ?>
-    </div>
+    <?!= include('collaborator'); ?>
+    <?!= include('manager'); ?>
 
   </div>
 
@@ -77,7 +71,11 @@
     </div>
   </div>
 
-  <?!= include('scripts'); ?>
+  <?!= include('scripts_core'); ?>
+  <?!= include('scripts_auth'); ?>
+  <?!= include('scripts_collaborator'); ?>
+  <?!= include('scripts_manager'); ?>
+
 </body>
 
 </html>

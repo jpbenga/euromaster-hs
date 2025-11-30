@@ -1,86 +1,201 @@
-<div class="dashboard-header">
-    <h2>Espace Manager</h2>
-    <div style="display: flex; gap: 15px; align-items: center;">
-        <div id="manager-name"></div>
-        <button class="btn-secondary" style="width: auto; padding: 5px 10px;"
-            onclick="handleDisconnect()">Déconnexion</button>
+<div id="manager-view" class="view hidden">
+
+    <div class="dashboard-header">
+        <h2>Espace Manager</h2>
+        <div style="display: flex; gap: 15px; align-items: center;">
+            <div id="manager-name"></div>
+            <button class="btn-secondary" style="width: auto; padding: 5px 10px;"
+                onclick="handleDisconnect()">Déconnexion</button>
+        </div>
     </div>
-</div>
 
-<div class="card" id="bdd-info-card-manager">
-    <p><strong>ID de la Base de Données :</strong> <span id="bdd-link-manager">Chargement...</span></p>
-</div>
-
-<div class="card">
-    <h3>Validations en Attente (Centre: <span id="manager-centre-code"></span>)</h3>
-    <div id="approvals-list">
+    <div class="card" id="bdd-info-card-manager">
+        <p><strong>ID de la Base de Données :</strong> <span id="bdd-link-manager">Chargement...</span></p>
+        <p style="font-size: 0.9em; color: #555;">(Ceci est votre base de données privée pour ce centre.)</p>
     </div>
-</div>
 
-<div class="card">
-    <h3>Gestion des Collaborateurs</h3>
+    <div class="card">
+        <h3>Communication & Rappels</h3>
 
-    <button id="show-collab-form-btn" class="btn-primary" style="width: auto; margin-bottom: 15px;">Ajouter un
-        Collaborateur</button>
+        <h4>1. Envoi Manuel de Rappel</h4>
+        <form id="manual-send-form">
+            <div class="form-group">
+                <label>Destinataires</label>
+                <select id="recipient-select" multiple size="5" style="width: 100%;" required>
+                </select>
+                <label style="font-weight:normal; margin-top: 10px;">
+                    <input type="checkbox" id="send-to-all-checkbox"> Envoyer à TOUS les collaborateurs du centre
+                    (Ignorer la sélection ci-dessus).
+                </label>
+            </div>
+            <button type="submit" class="btn-primary" id="manual-send-btn" style="margin-top: 10px;">Envoyer le Rappel
+                Maintenant</button>
+            <div id="manual-send-message" class="error-message hidden"></div>
+        </form>
 
-    <div id="collab-form-container" class="hidden"
-        style="margin-bottom: 20px; border: 1px solid #ddd; padding: 15px; border-radius: 4px;">
-        <h4><span id="collab-form-title">Ajouter</span> un Collaborateur</h4>
-        <form id="collaborator-form">
-            <input type="hidden" name="action" id="collab-form-action" value="CREATE">
+        <h4 style="margin-top: 30px;">2. Planification Automatique Hebdomadaire</h4>
+        <div id="trigger-status">Statut: Chargement...</div>
+
+        <form id="schedule-management-form">
+            <input type="hidden" id="current-trigger-action" value="CREATE">
             <div class="form-group">
-                <label>Matricule (ID Unique)</label>
-                <input type="text" id="collab-matricule" name="matricule" required>
-            </div>
-            <div class="form-group">
-                <label>Nom</label>
-                <input type="text" name="nom" required>
-            </div>
-            <div class="form-group">
-                <label>Prénom</label>
-                <input type="text" name="prenom" required>
-            </div>
-            <div class="form-group">
-                <label>Email</label>
-                <input type="text" name="email" required placeholder="nom.prenom@euromaster.com">
-            </div>
-            <div class="form-group">
-                <label>Code Centre</label>
-                <input type="text" name="code_centre" required>
-            </div>
-            <div class="form-group">
-                <label>Rôle</label>
-                <select name="role" required>
-                    <option value="COLLABORATOR">COLLABORATEUR</option>
-                    <option value="MANAGER">MANAGER</option>
+                <label>Jour de la Semaine</label>
+                <select id="schedule-day" required>
+                    <option value="MONDAY">Lundi</option>
+                    <option value="TUESDAY">Mardi</option>
+                    <option value="WEDNESDAY">Mercredi</option>
+                    <option value="THURSDAY">Jeudi</option>
+                    <option value="FRIDAY" selected>Vendredi</option>
+                    <option value="SATURDAY">Samedi</option>
+                    <option value="SUNDAY">Dimanche</option>
                 </select>
             </div>
-            <div style="display: flex; gap: 10px;">
-                <button type="submit" class="btn-primary" style="width: 50%;" id="collab-submit-btn">Créer</button>
-                <button type="button" class="btn-secondary" style="width: 50%;"
-                    id="cancel-collab-form-btn">Annuler</button>
+            <div class="form-group">
+                <label>Heure (HH:MM)</label>
+                <input type="time" id="schedule-time" value="15:00" required>
             </div>
-            <div id="collab-form-error" class="error-message hidden" style="margin-top: 10px;"></div>
+
+            <div style="display: flex; gap: 10px;">
+                <button type="submit" class="btn-primary" id="set-trigger-btn" style="flex: 1;">Planifier / Mettre à
+                    Jour</button>
+                <button type="button" class="btn-secondary" id="delete-trigger-btn"
+                    style="flex: 1; background-color: var(--error-color);" onclick="deleteAutomaticSchedule()">Supprimer
+                    la Planification</button>
+            </div>
+
+            <div id="schedule-message" class="error-message hidden" style="margin-top: 10px;"></div>
         </form>
     </div>
+    <div class="card">
+        <h3>Horaires de Référence (HORAIRES_REF)</h3>
 
-    <div style="overflow-x: auto;">
-        <table style="min-width: 700px;">
-            <thead>
-                <tr>
-                    <th>Matricule</th>
-                    <th>Nom/Prénom</th>
-                    <th>Email</th>
-                    <th>Centre</th>
-                    <th>Rôle</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="collaborators-list-body">
-                <tr>
-                    <td colspan="6">Chargement des collaborateurs...</td>
-                </tr>
-            </tbody>
-        </table>
+        <button id="show-schedule-form-btn" class="btn-primary" style="width: auto; margin-bottom: 15px;">Ajouter /
+            Modifier un Horaire</button>
+
+        <div id="schedule-form-container" class="hidden"
+            style="margin-bottom: 20px; border: 1px solid #ddd; padding: 15px; border-radius: 4px;">
+            <h4><span id="schedule-form-title">Ajouter</span> un Horaire</h4>
+            <form id="schedule-form">
+                <input type="hidden" name="action" id="schedule-form-action" value="CREATE">
+                <div class="form-group">
+                    <label>Code Centre</label>
+                    <input type="text" name="codeCentre" required>
+                </div>
+                <div class="form-group" style="display: flex; gap: 10px;">
+                    <div style="flex: 1;">
+                        <label>Début Standard</label>
+                        <input type="time" name="startTime" required>
+                    </div>
+                    <div style="flex: 1;">
+                        <label>Fin Standard</label>
+                        <input type="time" name="endTime" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Durée de Pause (Minutes)</label>
+                    <input type="number" name="pauseDurationMinutes" min="0" required>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" class="btn-primary" style="width: 50%;"
+                        id="schedule-submit-btn">Créer</button>
+                    <button type="button" class="btn-secondary" style="width: 50%;"
+                        id="cancel-schedule-form-btn">Annuler</button>
+                </div>
+                <div id="schedule-form-error" class="error-message hidden" style="margin-top: 10px;"></div>
+            </form>
+        </div>
+
+        <div style="overflow-x: auto;">
+            <table style="min-width: 500px;">
+                <thead>
+                    <tr>
+                        <th>Centre</th>
+                        <th>Début Std</th>
+                        <th>Fin Std</th>
+                        <th>Pause</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="schedules-list-body">
+                    <tr>
+                        <td colspan="5">Chargement...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Validations en Attente (Centre: <span id="manager-centre-code"></span>)</h3>
+        <div id="approvals-list">
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Gestion des Collaborateurs</h3>
+
+        <button id="show-collab-form-btn" class="btn-primary" style="width: auto; margin-bottom: 15px;">Ajouter un
+            Collaborateur</button>
+
+        <div id="collab-form-container" class="hidden"
+            style="margin-bottom: 20px; border: 1px solid #ddd; padding: 15px; border-radius: 4px;">
+            <h4><span id="collab-form-title">Ajouter</span> un Collaborateur</h4>
+            <form id="collaborator-form">
+                <input type="hidden" name="action" id="collab-form-action" value="CREATE">
+                <div class="form-group">
+                    <label>Matricule (ID Unique)</label>
+                    <input type="text" id="collab-matricule" name="matricule" required>
+                </div>
+                <div class="form-group">
+                    <label>Nom</label>
+                    <input type="text" name="nom" required>
+                </div>
+                <div class="form-group">
+                    <label>Prénom</label>
+                    <input type="text" name="prenom" required>
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="text" name="email" required placeholder="nom.prenom@euromaster.com">
+                </div>
+                <div class="form-group">
+                    <label>Code Centre</label>
+                    <input type="text" name="code_centre" required>
+                </div>
+                <div class="form-group">
+                    <label>Rôle</label>
+                    <select name="role" required>
+                        <option value="COLLABORATOR">COLLABORATEUR</option>
+                        <option value="MANAGER">MANAGER</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" class="btn-primary" style="width: 50%;" id="collab-submit-btn">Créer</button>
+                    <button type="button" class="btn-secondary" style="width: 50%;"
+                        id="cancel-collab-form-btn">Annuler</button>
+                </div>
+                <div id="collab-form-error" class="error-message hidden" style="margin-top: 10px;"></div>
+            </form>
+        </div>
+
+        <div style="overflow-x: auto;">
+            <table style="min-width: 700px;">
+                <thead>
+                    <tr>
+                        <th>Matricule</th>
+                        <th>Nom/Prénom</th>
+                        <th>Email</th>
+                        <th>Centre</th>
+                        <th>Rôle</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="collaborators-list-body">
+                    <tr>
+                        <td colspan="6">Chargement des collaborateurs...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>

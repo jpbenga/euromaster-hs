@@ -1,58 +1,50 @@
 <div id="setup-view" class="view hidden">
-    <div class="login-card" style="max-width: 600px; margin: 50px auto;">
+    <div class="login-card">
         <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/25/Euromaster_logo.svg/1200px-Euromaster_logo.svg.png"
-            alt="Euromaster Logo" class="logo" style="max-width: 150px;">
-        <h2>Configuration Initiale du Compteur</h2>
-        <p>Bienvenue ! Vous êtes le premier utilisateur. Veuillez configurer le centre et vous définir comme
-            Administrateur.</p>
+            alt="Euromaster Logo" class="logo">
+        <h2>Configuration Initiale du Centre</h2>
+        <p>Veuillez saisir les informations de votre centre pour commencer. Vous serez l'administrateur par défaut.</p>
 
         <form id="setup-form">
-            <h3 style="text-align: left; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-top: 20px;">1.
-                Informations de l'Administrateur (Vous)</h3>
             <div class="form-group">
-                <label>Matricule (ID Unique) :</label>
+                <label>Matricule (Personnel)</label>
                 <input type="text" name="matricule" required>
             </div>
-            <div class="form-group" style="display: flex; gap: 10px;">
-                <div style="flex: 1;">
-                    <label>Nom :</label>
-                    <input type="text" name="nom" required>
-                </div>
-                <div style="flex: 1;">
-                    <label>Prénom :</label>
-                    <input type="text" name="prenom" required>
-                </div>
-            </div>
-
-            <h3 style="text-align: left; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-top: 20px;">2.
-                Horaires de Référence du Centre</h3>
             <div class="form-group">
-                <label>Code du Centre :</label>
+                <label>Nom</label>
+                <input type="text" name="nom" required>
+            </div>
+            <div class="form-group">
+                <label>Prénom</label>
+                <input type="text" name="prenom" required>
+            </div>
+            <hr>
+            <div class="form-group">
+                <label>Code Centre (Ex: 001)</label>
                 <input type="text" name="codeCentre" required>
             </div>
-
+            <p style="margin-top: 20px; font-weight: bold;">Horaires de Travail Standard (Référence)</p>
             <div class="form-group" style="display: flex; gap: 10px;">
                 <div style="flex: 1;">
-                    <label>Heure de Début Standard (HH:MM) :</label>
+                    <label>Début Standard (Heure:Min)</label>
                     <input type="time" name="heureDebut" value="08:00" required>
                 </div>
                 <div style="flex: 1;">
-                    <label>Heure de Fin Standard (HH:MM) :</label>
+                    <label>Fin Standard (Heure:Min)</label>
                     <input type="time" name="heureFin" value="17:00" required>
                 </div>
             </div>
-
             <div class="form-group">
-                <label>Durée de Pause (Minutes) :</label>
-                <input type="number" name="dureePause" value="45" min="0" required>
+                <label>Durée de Pause Déduite (Minutes)</label>
+                <input type="number" name="dureePause" value="60" min="0" required>
             </div>
 
-            <button type="submit" class="btn-primary" id="setup-submit-btn" style="margin-top: 20px;">Finaliser la
-                Configuration</button>
+            <button type="submit" class="btn-primary" id="setup-submit-btn"
+                style="width: 100%; margin-top: 20px;">Terminer la Configuration</button>
             <button type="button" class="btn-secondary" onclick="showView('choice-view')"
-                style="margin-top: 10px;">Annuler et Revenir à la Connexion</button>
-        </form>
+                style="width: 100%; margin-top: 10px;">Annuler et Revenir</button>
 
-        <div id="setup-error" class="error-message hidden"></div>
+            <div id="setup-error" class="error-message hidden" style="margin-top: 10px;"></div>
+        </form>
     </div>
 </div>

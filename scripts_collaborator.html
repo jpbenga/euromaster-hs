@@ -1,0 +1,119 @@
+<script>
+    // Dépendances: scripts_core.html (currentUser, showNotification, loadSpreadsheetInfo)
+
+    function initCollaboratorView() {
+        document.getElementById('collab-name').textContent = currentUser.prenom + ' ' + currentUser.nom;
+        document.getElementById('collab-matricule-hidden').value = currentUser.matricule;
+        document.getElementById('collab-nom-hidden').value = currentUser.nom;
+        document.getElementById('collab-prenom-hidden').value = currentUser.prenom;
+        document.getElementById('collab-code-centre-hidden').value = currentUser.code_centre;
+
+        loadHistory();
+
+        const form = document.getElementById('overtime-form');
+        form.removeEventListener('submit', handleOvertimeSubmit);
+        form.addEventListener('submit', handleOvertimeSubmit);
+
+        loadSpreadsheetInfo();
+    }
+
+    function handleOvertimeSubmit(e) {
+        e.preventDefault();
+
+        const form = e.target;
+        const submitBtn = document.getElementById('overtime-submit-btn');
+        submitBtn.disabled = true;
+
+        // Récupérer les heures de début et de fin réelles
+        const startTime = form.startTime.value;
+        const endTime = form.endTime.value;
+
+        const overtimeData = {
+            matricule: form.matricule.value,
+            nom: form.nom.value,
+            prenom: form.prenom.value,
+            codeCentre: form.codeCentre.value,
+            date: form.date.value,
+            startTime: startTime,
+            endTime: endTime,
+            description: form.description.value
+        };
+
+        google.script.run
+            .withSuccessHandler(function (result) {
+                if (result.success) {
+                    showNotification(result.message, 'success');
+                    form.reset();
+                    loadHistory();
+                } else {
+                    showNotification("Erreur de soumission: " + result.error, 'error');
+                }
+                submitBtn.disabled = false;
+            })
+            .withFailureHandler(function (error) {
+                showNotification("Erreur serveur lors de la soumission: " + error, 'error');
+                submitBtn.disabled = false;
+            })
+            .logOvertimeEntry(overtimeData);
+    }
+
+    function loadHistory() {
+        const tbody = document.getElementById('history-list-body');
+        tbody.innerHTML = '<tr><td colspan="5">Chargement de l\'historique...</td></tr>';
+
+        google.script.run
+            .withSuccessHandler(function (history) {
+                tbody.innerHTML = '';
+                if (history.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5">Aucune saisie trouvée.</td></tr>';
+                    return;
+                }
+
+                history.forEach(item => {
+                    const date = new Date(item.date_supp).toLocaleDateString('fr-FR');
+                    const statusClass = item.status.toLowerCase().replace('_', '-');
+                    const row = document.createElement('tr');
+
+                    let actionsHtml = '';
+                    if (item.status === 'EN_ATTENTE') {
+                        actionsHtml = `<button onclick="confirmCancelEntry(${item.row_id})" class="btn-secondary" style="background-color: var(--error-color); width: auto; padding: 5px 10px;">Annuler</button>`;
+                    } else if (item.status === 'REJETE' && item.rejectionReason) {
+                        actionsHtml = `<button onclick="showNotification('Motif de rejet: ${item.rejectionReason.replace(/'/g, '\\\'')}', 'info')" class="btn-secondary" style="width: auto; padding: 5px 10px;">Voir Motif</button>`;
+                    }
+
+                    const displayStatus = item.status.replace('_', ' ');
+
+                    row.innerHTML = `
+                        <td>${date}</td>
+                        <td>${item.hours}h ${item.minutes}min</td>
+                        <td>${item.description}</td>
+                        <td><span class="status-badge status-${statusClass}">${displayStatus}</span></td>
+                        <td>${actionsHtml}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            })
+            .withFailureHandler(function (error) {
+                tbody.innerHTML = `<tr><td colspan="5" class="error-message">Erreur de chargement: ${error}</td></tr>`;
+            })
+            .getHistory(currentUser.matricule);
+    }
+
+    function confirmCancelEntry(rowId) {
+        if (confirm('Êtes-vous sûr de vouloir annuler cette saisie d\'heures supplémentaires ? Cette action est irréversible.')) {
+            google.script.run
+                .withSuccessHandler(function (result) {
+                    if (result.success) {
+                        showNotification(result.message, 'success');
+                        loadHistory();
+                    } else {
+                        showNotification(result.error, 'error');
+                    }
+                })
+                .withFailureHandler(function (error) {
+                    showNotification("Erreur serveur lors de l'annulation: " + error, 'error');
+                })
+                .cancelOvertimeEntry(rowId);
+        }
+    }
+</script>
