@@ -5,20 +5,23 @@
 
 /**
  * Main function that runs when the web app is accessed.
+ * MODIFIÉ pour gérer le token en paramètre URL.
  */
-function doGet() {
+function doGet(e) {
   const template = HtmlService.createTemplateFromFile('index');
+  
+  // Extraction du token s'il existe dans l'URL (?token=XYZ)
+  const token = e.parameter.token || '';
+  template.initialToken = token;
+
   const html = template.evaluate();
   html.setTitle('Euromaster HS Manager');
-  // Autoriser l'affichage dans Google Workspace ou dans des iframes.
   html.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL); 
   return html;
 }
 
 /**
  * Includes HTML files for templating.
- * @param {string} filename - The name of the HTML file to include.
- * @return {string} The content of the HTML file.
  */
 function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
@@ -26,11 +29,11 @@ function include(filename) {
 
 /**
  * Utility to get the email of the user accessing the app.
- * @return {string} The email of the effective user.
+ * NOTE: Avec executeAs USER_DEPLOYING, ceci retournera l'email de l'admin (vous), 
+ * sauf si c'est un manager connecté à son propre compte Google.
  */
 function getEffectiveUserEmail() {
   try {
-    // Si l'application est déployée sous 'User accessing the web app', ceci retourne l'email de l'utilisateur connecté.
     return Session.getEffectiveUser().getEmail(); 
   } catch (e) {
     Logger.log("Error getting effective user email: " + e.toString());

@@ -12,6 +12,14 @@
             return;
         }
 
+        // AUTO-LOGIN LOGIC (Gestion du Token URL)
+        // La variable globalToken est injectée depuis index.html (qui la reçoit de doGet)
+        if (typeof globalToken !== 'undefined' && globalToken) {
+            console.log("Token détecté, tentative de connexion auto...");
+            tryLogin(globalToken);
+            return;
+        }
+
         showView('choice-view');
 
         // Gérer l'affichage des boutons Setup/Login
@@ -29,16 +37,20 @@
     }
 
     /**
-     * Tente d'authentifier l'utilisateur via google.script.run (déclenché par le clic utilisateur)
+     * Tente d'authentifier l'utilisateur via google.script.run
+     * @param {string} token (Optionnel) Token d'accès collaborateur
      */
-    function tryLogin() {
+    function tryLogin(token = null) {
         elements.choiceErrorEl.classList.add('hidden');
         showView('loading-view');
 
         google.script.run
             .withSuccessHandler(handleLoginSuccess)
-            .withFailureHandler(handleServerError)
-            .authenticateUser();
+            .withFailureHandler(function (err) {
+                handleServerError(err);
+                if (token) showView('choice-view'); // Revenir si échec token
+            })
+            .authenticateUser(token);
     }
 
     /**
@@ -57,9 +69,9 @@
                 initCollaboratorView();
                 showView('collaborator-view');
             }
-        } else if (response.route === 'NOT_FOUND') {
-            // Afficher l'erreur si l'email est connecté à Google mais non trouvé dans la BDD
-            elements.choiceErrorEl.textContent = response.message;
+        } else {
+            // Afficher l'erreur
+            elements.choiceErrorEl.textContent = response.message || "Utilisateur non trouvé.";
             elements.choiceErrorEl.classList.remove('hidden');
             showView('choice-view');
         }

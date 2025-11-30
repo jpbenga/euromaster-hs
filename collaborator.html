@@ -8,6 +8,32 @@
         </div>
     </div>
 
+    <div class="card" style="background-color: transparent; box-shadow: none; padding: 0; margin-bottom: 20px;">
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+
+            <div
+                style="flex: 1; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-left: 5px solid var(--primary-color);">
+                <h4 style="margin-top: 0; color: #666;">Cette Semaine</h4>
+                <div id="stat-weekly" style="font-size: 24px; font-weight: bold; color: var(--primary-color);">
+                    Chargement...</div>
+            </div>
+
+            <div
+                style="flex: 1; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-left: 5px solid var(--info-color);">
+                <h4 style="margin-top: 0; color: #666;">Ce Mois</h4>
+                <div id="stat-monthly" style="font-size: 24px; font-weight: bold; color: var(--info-color);">
+                    Chargement...</div>
+            </div>
+
+            <div
+                style="flex: 1; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-left: 5px solid var(--secondary-color);">
+                <h4 style="margin-top: 0; color: #666;">Cette Année</h4>
+                <div id="stat-yearly" style="font-size: 24px; font-weight: bold; color: #dcb000;">Chargement...</div>
+            </div>
+
+        </div>
+    </div>
+
     <div class="card hidden" id="bdd-info-card-collaborator">
         <p><strong>ID de la Base de Données :</strong> <span id="bdd-link-collaborator">Chargement...</span></p>
     </div>

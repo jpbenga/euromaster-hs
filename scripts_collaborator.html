@@ -9,6 +9,7 @@
         document.getElementById('collab-code-centre-hidden').value = currentUser.code_centre;
 
         loadHistory();
+        loadStats();
 
         const form = document.getElementById('overtime-form');
         form.removeEventListener('submit', handleOvertimeSubmit);
@@ -24,7 +25,6 @@
         const submitBtn = document.getElementById('overtime-submit-btn');
         submitBtn.disabled = true;
 
-        // Récupérer les heures de début et de fin réelles
         const startTime = form.startTime.value;
         const endTime = form.endTime.value;
 
@@ -45,6 +45,7 @@
                     showNotification(result.message, 'success');
                     form.reset();
                     loadHistory();
+                    loadStats();
                 } else {
                     showNotification("Erreur de soumission: " + result.error, 'error');
                 }
@@ -106,6 +107,7 @@
                     if (result.success) {
                         showNotification(result.message, 'success');
                         loadHistory();
+                        loadStats();
                     } else {
                         showNotification(result.error, 'error');
                     }
@@ -115,5 +117,19 @@
                 })
                 .cancelOvertimeEntry(rowId);
         }
+    }
+
+    function loadStats() {
+        // MODIFIÉ : On passe explicitement le matricule de l'utilisateur courant (authentifié par token ou google)
+        google.script.run
+            .withSuccessHandler(function (stats) {
+                document.getElementById('stat-weekly').textContent = stats.weekly.text;
+                document.getElementById('stat-monthly').textContent = stats.monthly.text;
+                document.getElementById('stat-yearly').textContent = stats.yearly.text;
+            })
+            .withFailureHandler(function (error) {
+                console.error("Erreur chargement stats:", error);
+            })
+            .getMyStats(currentUser.matricule);
     }
 </script>

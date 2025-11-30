@@ -4,6 +4,10 @@
 <head>
   <base target="_top">
   <?!= include('styles'); ?>
+  <script>
+    // Injection du token serveur vers le client JS
+    var globalToken = "<?= initialToken ?>";
+  </script>
 </head>
 
 <body>
@@ -38,8 +42,10 @@
         </button>
 
         <button id="login-button" class="btn-secondary" onclick="tryLogin()">
-          Se Connecter
+          Se Connecter (Manager / Google)
         </button>
+        <p style="font-size:0.8em; margin-top:10px; color:#666;">Note: Si vous êtes collaborateur, veuillez utiliser le
+          lien reçu par email.</p>
         <div id="choice-error" class="error-message hidden"></div>
       </div>
     </div>
